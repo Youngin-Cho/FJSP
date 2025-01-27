@@ -1,0 +1,97 @@
+import numpy as np
+import pandas as pd
+
+
+class DataGenerator:
+    def __init__(self, config):
+        self.n_machines = config.n_machines
+        self.n_jobs = config.n_jobs
+        self.n_init_jobs = config.n_init_jobs
+        self.n_options_max = config.n_options_max
+        self.n_operations_min = config.n_operations_min
+        self.n_operations_max = config.n_operations_max
+        self.proctime_max = config.proctime_max
+        self.iat_avg = config.iat_avg
+        self.ddt = config.ddt
+
+    def generate(self, file_path=None):
+        columns = ["Job_Name", "Job_Index", "Arrival_Date", "Due_Date",
+                   "Operation_Name", "Operation_Index", "Order"]
+        columns = columns + ["Machine %d" % i for i in range(self.n_machines)]
+
+        temp = []
+        offset = 0
+        arrival_date = 0
+        for i in range(self.n_jobs):
+            job_name = "J-%d" % i
+            job_index = i
+
+            if i >= self.n_init_jobs:
+                iat = int(np.random.geometric(1 / self.iat_avg))
+                arrival_date += iat
+
+            num_operations = np.random.randint(self.n_operations_min, self.n_operations_max + 1)
+            proctime_sum = 0.0
+            for j in range(num_operations):
+                operation_name = "O-%d%d" % (i, j)
+                operation_index = offset + j
+                order = j
+
+                proctime = np.zeros(self.n_machines)
+                num_options = np.random.randint(1, self.n_options_max + 1)
+                options = np.random.choice(range(self.n_machines), num_options, replace=False)
+                proctime_avg = np.random.randint(1, self.proctime_max + 1)
+                proctime_sampled = [np.random.randint(np.ceil(0.8 * proctime_avg),
+                                                      np.floor(1.2 * proctime_avg) + 1)
+                                    for _ in range(num_options)]
+                proctime_sum += np.mean(proctime_sampled)
+                proctime[options] = proctime_sampled
+
+                row = ([job_name, job_index, arrival_date, 0, operation_name, operation_index, order]
+                       + list(proctime))
+                temp.append(row)
+
+            for k in range(offset, offset + num_operations):
+                temp[k][3] = int(proctime_sum * self.ddt)
+            offset += num_operations
+
+        df_scenario = pd.DataFrame(temp, columns=columns)
+
+        if file_path is not None:
+            writer = pd.ExcelWriter(file_path)
+            df_scenario.to_excel(writer, sheet_name="scenario", index=False)
+            writer.close()
+
+        return df_scenario
+
+
+if __name__ == '__main__':
+    import os
+    import argparse
+
+    def get_config():
+        parser = argparse.ArgumentParser(description="FJSP")
+
+        parser.add_argument("--n_jobs", type=int, default=15, help="number of jobs")
+        parser.add_argument("--n_init_jobs", type=int, default=5, help="number of jobs")
+        parser.add_argument("--n_machines", type=int, default=5, help="number of machines")
+        parser.add_argument("--n_operations_min", type=int, default=4, help="minimum number of operations per job")
+        parser.add_argument("--n_operations_max", type=int, default=6, help="maximum number of operations per job")
+        parser.add_argument("--n_options_max", type=int, default=5, help="maximum number of available machines")
+        parser.add_argument("--proctime_max", type=int, default=20, help="minimum processing time")
+        parser.add_argument("--iat_avg", type=float, default=10, help="average inter-arrival time")
+        parser.add_argument("--ddt", type=float, default=1.2, help="due date tardiness")
+
+        return parser.parse_args()
+
+    config = get_config()
+
+    file_dir = "../input/validation/%d-%d/" % (config.n_jobs, config.n_machines)
+    if not os.path.exists(file_dir):
+        os.makedirs(file_dir)
+
+    data_generator = DataGenerator(config)
+    n_instance = 10
+    for i in range(1, n_instance + 1):
+        file_path = file_dir + "instance-{0}.xlsx".format(i)
+        data_generator.generate(file_path)
