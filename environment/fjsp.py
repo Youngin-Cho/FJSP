@@ -307,8 +307,8 @@ class FlexibleJobShop:
 
             # Normalization
             fea_j[:, 3] = fea_j[:, 3] / np.max(fea_j[:, 3]) if np.max(fea_j[:, 3]) > 0.0 else 0.0
-            fea_j[:, 4] = fea_j[:, 4] / np.max(fea_j[:, 5])
-            fea_j[:, 5] = fea_j[:, 5] / np.max(fea_j[:, 5])
+            fea_j[:, 4] = fea_j[:, 4] / np.max(fea_j[:, 5]) if np.max(fea_j[:, 5]) > 0.0 else 0.0
+            fea_j[:, 5] = fea_j[:, 5] / np.max(fea_j[:, 5]) if np.max(fea_j[:, 5]) > 0.0 else 0.0
 
             # Machine Feature
             proctime_remaining = np.array(proctime_remaining)
