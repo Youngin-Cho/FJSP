@@ -8,6 +8,7 @@ from collections import OrderedDict
 from torch_geometric.data import HeteroData
 from environment.data import DataGenerator
 from environment.simulation import *
+from utils.visualize import WIP_graph
 
 
 class StatePDR:
@@ -183,7 +184,12 @@ class FlexibleJobShop:
 
     def _initialize(self):
         if type(self.data_src) is DataGenerator:
-            data = self.data_src.generate()
+            flag = True
+            while flag:
+                data = self.data_src.generate()
+                max_wip = WIP_graph(data)
+                if len(data.columns[6:]) * 0.8 <= max_wip <= len(data.columns[6:]) * 1.2:
+                    flag = False
         elif type(self.data_src) is pd.DataFrame:
             data = self.data_src
         else:

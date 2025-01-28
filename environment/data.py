@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 
+from utils.visualize import WIP_graph
+
 
 class DataGenerator:
     def __init__(self, config):
@@ -91,7 +93,12 @@ if __name__ == '__main__':
         os.makedirs(file_dir)
 
     data_generator = DataGenerator(config)
-    n_instance = 10
+    n_instance = 20
     for i in range(1, n_instance + 1):
-        file_path = file_dir + "instance-{0}.xlsx".format(i)
-        data_generator.generate(file_path)
+        flag = True
+        while flag:
+            file_path = file_dir + "instance-{0}.xlsx".format(i)
+            data = data_generator.generate(file_path=file_path)
+            max_wip = WIP_graph(data)
+            if config.n_machines * 0.8 <= max_wip <= config.n_machines * 1.2:
+                flag = False
