@@ -1,3 +1,4 @@
+import math
 import torch
 import numpy as np
 
@@ -20,6 +21,19 @@ def convert_state(state, device, flags=None):
         mask_pair = torch.BoolTensor(np.array([state.mask_pair])).to(device)
 
     return fea_g, fea_pair, mask_pair
+
+
+def clip_grad_norms(param_groups, max_norm=math.inf):
+    grad_norms = [
+        torch.nn.utils.clip_grad_norm_(
+            group['params'],
+            max_norm if max_norm > 0 else math.inf,  # Inf so no clipping but still call to calc
+            norm_type=2
+        )
+        for group in param_groups
+    ]
+    grad_norms_clipped = [min(g_norm, max_norm) for g_norm in grad_norms] if max_norm > 0 else grad_norms
+    return grad_norms, grad_norms_clipped
 
 
 class RollOutMemory:
@@ -84,6 +98,7 @@ class Agent:
         self.device = device
 
         self.n_envs = config.n_envs
+        self.max_grad_norm = config.max_grad_norm
         self.lr = config.lr
         self.lr_decay = config.lr_decay
         self.lr_step = config.lr_step
@@ -144,6 +159,7 @@ class Agent:
             advantages[:, i] = advantage
 
         avg_loss = 0.0
+        avg_grad_norms, avg_grad_norms_clipped = 0.0, 0.0
         for _ in range(self.K_epoch):
             new_probs, new_values = self.policy(fea_graph=fea_gs,
                                                 fea_pair=fea_pairs.flatten(0, 1),
@@ -163,13 +179,19 @@ class Agent:
 
             self.optimizer.zero_grad()
             loss.mean().backward()
+            grad_norms, grad_norms_clipped = clip_grad_norms(self.optimizer.param_groups, self.max_grad_norm)
             self.optimizer.step()
 
             avg_loss += loss.mean().item()
+            avg_grad_norms += grad_norms[0].item()
+            if isinstance(grad_norms_clipped[0], float):
+                avg_grad_norms_clipped += grad_norms_clipped[0]
+            else:
+                avg_grad_norms_clipped += grad_norms_clipped[0].item()
 
         self.memory.clear()
 
-        return avg_loss / self.K_epoch
+        return avg_loss / self.K_epoch, avg_grad_norms / self.K_epoch, avg_grad_norms_clipped / self.K_epoch
 
     def save(self, episode, model_dir):
         torch.save({"episode": episode,

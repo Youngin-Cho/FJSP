@@ -44,9 +44,11 @@ def get_config():
 
     parser.add_argument("--n_episodes", type=int, default=1000, help="number of episodes")
     parser.add_argument("--n_envs", type=int, default=10, help="number of environments")
-    parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
+    parser.add_argument("--lr", type=float, default=0.000005, help="learning rate")
     parser.add_argument("--lr_decay", type=float, default=1.0, help="learning rate decay ratio")
     parser.add_argument("--lr_step", type=int, default=2000, help="step size to reduce learning rate")
+    parser.add_argument('--max_grad_norm', type=float, default=1.0,
+                        help='Maximum L2 norm for gradient clipping, default 1.0 (0 to disable clipping)')
     parser.add_argument("--gamma", type=float, default=1.00, help="discount ratio")
     parser.add_argument("--lmbda", type=float, default=0.95, help="GAE parameter")
     parser.add_argument("--eps_clip", type=float, default=0.2, help="clipping parameter")
@@ -145,7 +147,9 @@ if __name__ == "__main__":
             writer.add_scalar("Training/Learning Rate", agent.scheduler.get_last_lr()[0], e)
 
         n_update = 0
-        avg_loss = 0.0
+        loss_episode = 0.0
+        grad_norms_episode = 0.0
+        grad_norms_clipped_episode = 0.0
 
         state_lst = [envs[i].reset() for i in range(n_envs)]
         reward_lst = [0.0 for i in range(n_envs)]
@@ -180,20 +184,30 @@ if __name__ == "__main__":
                 if all(done_lst):
                     break
 
+            loss, grad_norms, grad_norms_clipped = agent.update(state_lst, update_flags)
+
             n_update += 1
-            avg_loss += agent.update(state_lst, update_flags)
+            loss_episode += loss
+            grad_norms_episode += grad_norms
+            grad_norms_clipped_episode += grad_norms_clipped
 
         agent.scheduler.step()
 
-        print("episode: %d | reward: %.4f | loss: %.4f" % (e, np.mean(reward_lst), avg_loss / n_update))
+        print("episode: %d | reward: %.4f | loss: %.4f | grad_norms: %.4f | grad_norms_clipped: %.4f"
+              % (e, np.mean(reward_lst), loss_episode / n_update, grad_norms_episode / n_update, grad_norms_clipped_episode / n_update))
         with open(log_dir + "train_log.csv", 'a') as f:
-            f.write('%d, %1.4f, %1.4f, %f\n' % (e, np.mean(reward_lst), avg_loss, agent.scheduler.get_last_lr()[0]))
+            f.write('%d, %1.4f, %1.4f, %f\n' % (e, np.mean(reward_lst), loss_episode / n_update, agent.scheduler.get_last_lr()[0]))
 
         if use_vessl:
-            vessl.log(payload={"Train/Reward": np.mean(reward_lst), "Train/Loss": avg_loss / n_update}, step=e)
+            vessl.log(payload={"Train/Reward": np.mean(reward_lst),
+                               "Train/Loss": loss_episode / n_update,
+                               "Train/GradNorms": grad_norms_episode / n_update,
+                               "Train/GradNormsClipped": grad_norms_clipped_episode / n_update}, step=e)
         else:
             writer.add_scalar("Training/Reward", np.mean(reward_lst), e)
-            writer.add_scalar("Training/Loss", avg_loss / n_update, e)
+            writer.add_scalar("Training/Loss", loss_episode / n_update, e)
+            writer.add_scalar("Training/GradNorms", grad_norms_episode / n_update, e)
+            writer.add_scalar("Training/GradNormsClipped", grad_norms_clipped_episode / n_update, e)
 
         if e == start_episode or e % eval_every == 0:
             total_tardiness_avg = evaluate(agent, device, config)
