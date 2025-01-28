@@ -10,6 +10,16 @@ from environment.data import DataGenerator
 from environment.simulation import *
 
 
+class StatePDR:
+    def __init__(self, num_jobs, num_machines):
+        self.priority_index = np.zeros((num_jobs, num_machines))
+        self.mask_pair = np.zeros((num_jobs, num_machines), dtype=bool)
+
+    def update(self, priority_index, mask_pair):
+        self.priority_index = priority_index
+        self.mask_pair = mask_pair
+
+
 class State:
     def __init__(self, num_jobs, num_machines, look_ahead, device,
                  input_dim_o=4, input_dim_j=6, input_dim_m=8, input_dim_pair=2):
@@ -35,10 +45,11 @@ class State:
 
 
 class FlexibleJobShop:
-    def __init__(self, data_src, look_ahead, device, record_events=False):
+    def __init__(self, data_src, look_ahead, device, algorithm='RL', record_events=False):
         self.data_src = data_src
         self.look_ahead = look_ahead
         self.device = device
+        self.algorithm = algorithm
         self.record_events = record_events
 
         self.data, self.num_jobs, self.num_operations, self.num_machines, \
@@ -84,7 +95,10 @@ class FlexibleJobShop:
             if self.decision_time != self.sim_env.now:
                 self.actions_done = []
 
-            next_state = self._get_state()
+            if self.algorithm == "RL":
+                next_state = self._get_state_for_RL()
+            else:
+                next_state = self._get_state_for_heuristics()
 
             if done:
                 break
@@ -138,7 +152,10 @@ class FlexibleJobShop:
                 self.actions_done = []
                 self.decision_time = self.sim_env.now
 
-            initial_state = self._get_state()
+            if self.algorithm == "RL":
+                initial_state = self._get_state_for_RL()
+            else:
+                initial_state = self._get_state_for_heuristics()
 
             if not initial_state.mask_pair.any():
                 new_jobs = []
@@ -211,7 +228,7 @@ class FlexibleJobShop:
 
         return mask_pairs
 
-    def _get_state(self):
+    def _get_state_for_RL(self):
         fea_j = np.zeros((self.num_jobs, self.input_dim_j + self.look_ahead * self.input_dim_o))
         fea_m = np.zeros((self.num_machines, self.input_dim_m))
         fea_pair = np.zeros((self.num_jobs, self.num_machines, self.input_dim_pair))
@@ -387,6 +404,30 @@ class FlexibleJobShop:
 
         state = State(self.num_jobs, self.num_machines, self.look_ahead, self.device)
         state.update(fea_g, fea_pair, mask_pair)
+
+        return state
+
+    def _get_state_for_heuristics(self):
+        priority_index = np.zeros((self.num_jobs, self.num_machines))
+
+        for job in self.monitor.jobs_in_queue.values():
+            operation = job.get_current_operation()
+            proctimes = operation.options
+            if self.algorithm == "SPT":
+                priority_index[job.id, proctimes != 0] = 1 / proctimes[proctimes != 0]
+            elif self.algorithm == "MDD":
+                priority_index[job.id, proctimes != 0] = 1 / np.maximum(job.due_date, proctimes[proctimes != 0] + self.sim_env.now)
+            elif self.algorithm == "ATC":
+                priority_index[job.id, proctimes != 0] = 1 / proctimes[proctimes != 0] * np.exp(- np.maximum(job.due_date - self.sim_env.now - proctimes[proctimes != 0], 0) / proctimes[proctimes != 0])
+            elif self.algorithm == "COVERT":
+                pass
+            else:
+                print("invalid algorithm name")
+
+        mask_pair = self._get_mask()
+
+        state = StatePDR(self.num_jobs, self.num_machines)
+        state.update(priority_index, mask_pair)
 
         return state
 
