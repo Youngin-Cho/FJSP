@@ -12,6 +12,7 @@ class DataGenerator:
         self.n_options_max = config.n_options_max
         self.n_operations_min = config.n_operations_min
         self.n_operations_max = config.n_operations_max
+        self.proctime_min = config.proctime_min
         self.proctime_max = config.proctime_max
         self.iat_avg = config.iat_avg
         self.ddt = config.ddt
@@ -23,14 +24,19 @@ class DataGenerator:
 
         temp = []
         offset = 0
-        arrival_date = 0
+        arrival_dates = [int(self.iat_avg * i) for i in range(1, int(self.n_jobs - self.n_init_jobs) + 1)]
+        # arrival_date = 0
         for i in range(self.n_jobs):
             job_name = "J-%d" % i
             job_index = i
 
             if i >= self.n_init_jobs:
-                iat = int(np.random.geometric(1 / self.iat_avg))
-                arrival_date += iat
+                perturbation = np.random.randint(-2, 3)
+                arrival_date = arrival_dates[int(i - self.n_init_jobs)] + perturbation
+                # iat = int(np.random.geometric(1 / self.iat_avg))
+                # arrival_date += iat
+            else:
+                arrival_date = 0
 
             num_operations = np.random.randint(self.n_operations_min, self.n_operations_max + 1)
             proctime_sum = 0.0
@@ -42,11 +48,11 @@ class DataGenerator:
                 proctime = np.zeros(self.n_machines)
                 num_options = np.random.randint(1, self.n_options_max + 1)
                 options = np.random.choice(range(self.n_machines), num_options, replace=False)
-                proctime_avg = np.random.randint(1, self.proctime_max + 1)
+                proctime_avg = np.random.randint(self.proctime_min, self.proctime_max + 1)
                 proctime_sampled = [np.random.randint(np.ceil(0.8 * proctime_avg),
                                                       np.floor(1.2 * proctime_avg) + 1)
                                     for _ in range(num_options)]
-                proctime_sum += np.mean(proctime_sampled)
+                proctime_sum += np.max(proctime_sampled)
                 proctime[options] = proctime_sampled
 
                 row = ([job_name, job_index, arrival_date, 0, operation_name, operation_index, order]
@@ -80,9 +86,10 @@ if __name__ == '__main__':
         parser.add_argument("--n_operations_min", type=int, default=4, help="minimum number of operations per job")
         parser.add_argument("--n_operations_max", type=int, default=6, help="maximum number of operations per job")
         parser.add_argument("--n_options_max", type=int, default=5, help="maximum number of available machines")
-        parser.add_argument("--proctime_max", type=int, default=20, help="minimum processing time")
-        parser.add_argument("--iat_avg", type=float, default=10, help="average inter-arrival time")
-        parser.add_argument("--ddt", type=float, default=1.2, help="due date tardiness")
+        parser.add_argument("--proctime_min", type=int, default=10, help="minimum processing time")
+        parser.add_argument("--proctime_max", type=int, default=20, help="maximum processing time")
+        parser.add_argument("--iat_avg", type=float, default=15, help="average inter-arrival time")
+        parser.add_argument("--ddt", type=float, default=1.5, help="due date tardiness")
 
         return parser.parse_args()
 
@@ -95,10 +102,12 @@ if __name__ == '__main__':
     data_generator = DataGenerator(config)
     n_instance = 20
     for i in range(1, n_instance + 1):
-        flag = True
-        while flag:
-            file_path = file_dir + "instance-{0}.xlsx".format(i)
-            data = data_generator.generate(file_path=file_path)
-            max_wip = WIP_graph(data)
-            if config.n_machines * 0.8 <= max_wip <= config.n_machines * 1.2:
-                flag = False
+        file_path = file_dir + "instance-{0}.xlsx".format(i)
+        data_generator.generate(file_path=file_path)
+        # flag = True
+        # while flag:
+        #     file_path = file_dir + "instance-{0}.xlsx".format(i)
+        #     data = data_generator.generate(file_path=file_path)
+        #     max_wip = WIP_graph(data)
+        #     if config.n_machines * 0.8 <= max_wip <= config.n_machines * 1.2:
+        #         flag = False

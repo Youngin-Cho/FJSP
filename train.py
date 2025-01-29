@@ -28,9 +28,10 @@ def get_config():
     parser.add_argument("--n_operations_min", type=int, default=4, help="minimum number of operations per job")
     parser.add_argument("--n_operations_max", type=int, default=6, help="maximum number of operations per job")
     parser.add_argument("--n_options_max", type=int, default=5, help="maximum number of available machines")
-    parser.add_argument("--proctime_max", type=int, default=20, help="minimum processing time")
-    parser.add_argument("--iat_avg", type=float, default=10, help="average inter-arrival time")
-    parser.add_argument("--ddt", type=float, default=1.2, help="due date tardiness")
+    parser.add_argument("--proctime_min", type=int, default=10, help="minimum processing time")
+    parser.add_argument("--proctime_max", type=int, default=20, help="maximum processing time")
+    parser.add_argument("--iat_avg", type=float, default=15, help="average inter-arrival time")
+    parser.add_argument("--ddt", type=float, default=1.5, help="due date tardiness")
 
     parser.add_argument("--look_ahead", type=int, default=2, help="look-ahead parameter")
     parser.add_argument("--embed_dim", type=int, default=128, help="node embedding dimension")

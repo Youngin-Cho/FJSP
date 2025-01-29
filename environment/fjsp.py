@@ -184,12 +184,13 @@ class FlexibleJobShop:
 
     def _initialize(self):
         if type(self.data_src) is DataGenerator:
-            flag = True
-            while flag:
-                data = self.data_src.generate()
-                max_wip = WIP_graph(data)
-                if len(data.columns[6:]) * 0.8 <= max_wip <= len(data.columns[6:]) * 1.2:
-                    flag = False
+            data = self.data_src.generate()
+            # flag = True
+            # while flag:
+            #     data = self.data_src.generate()
+            #     max_wip = WIP_graph(data)
+            #     if len(data.columns[6:]) * 0.8 <= max_wip <= len(data.columns[6:]) * 1.2:
+            #         flag = False
         elif type(self.data_src) is pd.DataFrame:
             data = self.data_src
         else:
