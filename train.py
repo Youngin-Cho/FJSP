@@ -34,21 +34,21 @@ def get_config():
     parser.add_argument("--ddt", type=float, default=1.5, help="due date tardiness")
 
     parser.add_argument("--look_ahead", type=int, default=2, help="look-ahead parameter")
-    parser.add_argument("--embed_dim", type=int, default=128, help="node embedding dimension")
+    parser.add_argument("--embed_dim", type=int, default=256, help="node embedding dimension")
     parser.add_argument("--n_heads", type=int, default=8, help="number of heads in MHA sub-layers")
     parser.add_argument("--n_layers_ff", type=int, default=2, help="number of FFN layers")
     parser.add_argument("--n_layers_hgt", type=int, default=2, help="number of MLAN layers")
     parser.add_argument("--n_layers_actor", type=int, default=2, help="number of Actor layers")
     parser.add_argument("--n_layers_critic", type=int, default=2, help="number of Critic layers")
-    parser.add_argument('--hidden_dim_actor', type=int, default=384, help='Dimension of hidden layers in Actor')
-    parser.add_argument('--hidden_dim_critic', type=int, default=256, help='Dimension of hidden layers in Critic')
+    parser.add_argument('--hidden_dim_actor', type=int, default=768, help='Dimension of hidden layers in Actor')
+    parser.add_argument('--hidden_dim_critic', type=int, default=512, help='Dimension of hidden layers in Critic')
 
-    parser.add_argument("--n_episodes", type=int, default=1000, help="number of episodes")
-    parser.add_argument("--n_envs", type=int, default=10, help="number of environments")
-    parser.add_argument("--lr", type=float, default=0.000005, help="learning rate")
+    parser.add_argument("--n_episodes", type=int, default=5000, help="number of episodes")
+    parser.add_argument("--n_envs", type=int, default=20, help="number of environments")
+    parser.add_argument("--lr", type=float, default=0.00001, help="learning rate")
     parser.add_argument("--lr_decay", type=float, default=1.0, help="learning rate decay ratio")
     parser.add_argument("--lr_step", type=int, default=2000, help="step size to reduce learning rate")
-    parser.add_argument('--max_grad_norm', type=float, default=1.0,
+    parser.add_argument('--max_grad_norm', type=float, default=0.0,
                         help='Maximum L2 norm for gradient clipping, default 1.0 (0 to disable clipping)')
     parser.add_argument("--gamma", type=float, default=1.00, help="discount ratio")
     parser.add_argument("--lmbda", type=float, default=0.95, help="GAE parameter")
@@ -59,8 +59,8 @@ def get_config():
     parser.add_argument("--V_coeff", type=float, default=0.5, help="coefficient for value loss")
     parser.add_argument("--E_coeff", type=float, default=0.01, help="coefficient for entropy loss")
 
-    parser.add_argument("--eval_every", type=int, default=10, help="Evaluate every x episodes")
-    parser.add_argument("--save_every", type=int, default=100, help="Save a model every x episodes")
+    parser.add_argument("--eval_every", type=int, default=50, help="Evaluate every x episodes")
+    parser.add_argument("--save_every", type=int, default=500, help="Save a model every x episodes")
     parser.add_argument("--reset_every", type=int, default=1, help="Generate new instances every x episodes")
     parser.add_argument("--record_events", type=int, default=0, help="whether to record the events (0: False, 1:True)")
 
