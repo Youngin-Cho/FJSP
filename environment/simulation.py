@@ -79,6 +79,9 @@ class Source:
         self.calling_event[job.name] = self.env.event()
         next_machine = yield self.calling_event[job.name]
 
+        if next_machine == "Buffer":
+            self.monitor.delay[job.id] = self.env.now
+
         self.model[next_machine].put(job)
         del self.calling_event[job.name]
 
@@ -146,6 +149,9 @@ class Machine:
             self.calling_event[job.name] = self.env.event()
             next_machine = yield self.calling_event[job.name]
 
+            if next_machine == "Buffer":
+                self.monitor.delay[job.id] = self.env.now
+
             del self.calling_event[job.name]
             self.model[next_machine].put(job)
 
@@ -195,6 +201,11 @@ class Buffer:
 
         self.calling_event[job.name] = self.env.event()
         next_machine = yield self.calling_event[job.name]
+
+        if next_machine == "Buffer":
+            self.monitor.delay[job.id] = self.env.now
+        else:
+            del self.monitor.delay[job.id]
 
         if self.monitor.record_events:
             self.monitor.record(self.env.now, location=self.name, job=job.name,
@@ -247,6 +258,8 @@ class Monitor:
         self.jobs_before_arrival = {}
         self.jobs_in_process = {}
         self.jobs_completed = {}
+
+        self.delay = {}
 
         self.time = []
         self.location = []

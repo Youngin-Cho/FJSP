@@ -439,9 +439,16 @@ class FlexibleJobShop:
         return state
 
     def _calculate_reward(self):
-        tardiness = np.sum(np.maximum(self.completion_time - self.due_dates, 0))
-        tardiness_updated = np.sum(np.maximum(self.completion_time_updated - self.due_dates, 0))
-        reward = - (tardiness_updated - tardiness)
+        reward = 0.0
+        if self.sim_env.now - self.decision_time > 0:
+            for job_id, waiting_start in self.monitor.delay.items():
+                reward += - (self.sim_env.now - waiting_start)  # / (self.sim_env.now - self.decision_time)
+                self.monitor.delay[job_id] = self.sim_env.now
+
+        # tardiness = np.sum(np.maximum(self.completion_time - self.due_dates, 0))
+        # tardiness_updated = np.sum(np.maximum(self.completion_time_updated - self.due_dates, 0))
+        # reward = - (tardiness_updated - tardiness)
+
         return reward
 
     def _modeling(self):
