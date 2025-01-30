@@ -83,15 +83,15 @@ if __name__ == '__main__':
     def get_config():
         parser = argparse.ArgumentParser(description="FJSP")
 
-        parser.add_argument("--n_jobs", type=int, default=70, help="number of jobs")
-        parser.add_argument("--n_init_jobs", type=int, default=10, help="number of jobs")
-        parser.add_argument("--n_machines", type=int, default=20, help="number of machines")
+        parser.add_argument("--n_jobs", type=int, default=15, help="number of jobs")
+        parser.add_argument("--n_init_jobs", type=int, default=5, help="number of jobs")
+        parser.add_argument("--n_machines", type=int, default=5, help="number of machines")
         parser.add_argument("--n_operations_min", type=int, default=4, help="minimum number of operations per job")
         parser.add_argument("--n_operations_max", type=int, default=6, help="maximum number of operations per job")
         parser.add_argument("--n_options_max", type=int, default=5, help="maximum number of available machines")
         parser.add_argument("--proctime_min", type=int, default=1, help="minimum processing time")
         parser.add_argument("--proctime_max", type=int, default=20, help="maximum processing time")
-        parser.add_argument("--iat_avg", type=float, default=2.5, help="average inter-arrival time")
+        parser.add_argument("--iat_avg", type=float, default=10, help="average inter-arrival time")
         parser.add_argument("--ddt", type=float, default=1.2, help="due date tardiness")
 
         return parser.parse_args()
