@@ -10,6 +10,8 @@ from environment.data import DataGenerator
 from environment.simulation import *
 from utils.visualize import WIP_graph
 
+from datetime import datetime
+
 
 class StatePDR:
     def __init__(self, num_jobs, num_machines):
@@ -53,7 +55,7 @@ class FlexibleJobShop:
         self.algorithm = algorithm
         self.record_events = record_events
 
-        self.data, self.num_jobs, self.num_operations, self.num_machines, \
+        self.df_scenario, self.df_initial, self.num_jobs, self.num_operations, self.num_machines, \
             self.job_ids, self.machine_ids, self.due_dates = self._initialize()
 
         self.input_dim_o = 4
@@ -88,7 +90,7 @@ class FlexibleJobShop:
                     while self.sim_env.now in [event[0] for event in self.sim_env._queue]:
                         self.sim_env.step()
                     break
-                if len(self.monitor.operations_done) == len(self.data):
+                if len(self.monitor.operations_done) == len(self.df_scenario):
                     done = True
                     break
                 self.sim_env.step()
@@ -128,6 +130,7 @@ class FlexibleJobShop:
         reward = self._calculate_reward()
 
         self.completion_time = copy.copy(self.completion_time_updated)
+        self.total_tardiness = self.model["Sink"].total_tardiness
         if self.decision_time != self.sim_env.now:
             self.decision_time = self.sim_env.now
 
@@ -139,8 +142,10 @@ class FlexibleJobShop:
         self.actions_done = []
         self.completion_time = np.zeros(self.num_jobs)
         self.completion_time_updated = np.zeros(self.num_jobs)
+        self.total_tardiness = 0.0
         self.decision_time = 0.0
 
+        # cnt = 1
         while True:
             while True:
                 if self.monitor.scheduling:
@@ -165,15 +170,18 @@ class FlexibleJobShop:
                     if not operation.id in self.monitor.operations_in_buffer.keys():
                         new_jobs.append(job.id)
 
-                for job_id in new_jobs:
-                    job = self.monitor.remove_queue(job_id)
-                    current_machine = job.current_machine
-                    next_machine = "Buffer"
+                if len(new_jobs) != 0:
+                    for job_id in new_jobs:
+                        job = self.monitor.remove_queue(job_id)
+                        current_machine = job.current_machine
+                        next_machine = "Buffer"
 
-                    if current_machine is None:
-                        self.model["Source"].calling_event[job.name].succeed(next_machine)
-                    else:
-                        self.model[current_machine].calling_event[job.name].succeed(next_machine)
+                        if current_machine is None:
+                            self.model["Source"].calling_event[job.name].succeed(next_machine)
+                        else:
+                            self.model[current_machine].calling_event[job.name].succeed(next_machine)
+                else:
+                    self.monitor.scheduling = False
             else:
                 self.decision_time = self.sim_env.now
                 break
@@ -184,37 +192,36 @@ class FlexibleJobShop:
 
     def _initialize(self):
         if type(self.data_src) is DataGenerator:
-            data = self.data_src.generate()
+            df_scenario, df_initial = self.data_src.generate()
             # flag = True
             # while flag:
-            #     data = self.data_src.generate()
-            #     max_wip = WIP_graph(data)
-            #     if len(data.columns[6:]) * 0.8 <= max_wip <= len(data.columns[6:]) * 1.2:
+            #     df_scenario, df_initial = self.data_src.generate()
+            #     max_wip = WIP_graph(df_scenario)
+            #     if len(df_scenario.columns[9:]) * 0.8 <= max_wip <= len(df_scenario.columns[9:]) * 1.2:
             #         flag = False
-        elif type(self.data_src) is pd.DataFrame:
-            data = self.data_src
         else:
-            data = pd.read_excel(self.data_src, sheet_name="scenario", engine='openpyxl')
+            df_scenario = pd.read_excel(self.data_src, sheet_name="scenario", engine='openpyxl')
+            df_initial = pd.read_excel(self.data_src, sheet_name="initial", engine='openpyxl')
 
-        data = data.sort_values(by=["Operation_Index"])
+        df_scenario = df_scenario.sort_values(by=["Operation_Index"])
 
-        num_jobs = len(data["Job_Name"].unique())
-        num_operations = len(data)
-        num_machines = len(data.columns[6:])
+        num_jobs = len(df_scenario["Job_Name"].unique())
+        num_operations = len(df_scenario)
+        num_machines = len(df_scenario.columns[9:])
 
         job_ids = OrderedDict()
-        for i, name in zip(data["Job_Index"].unique(), data["Job_Name"].unique()):
+        for i, name in zip(df_scenario["Job_Index"].unique(), df_scenario["Job_Name"].unique()):
             job_ids[int(i)] = name
 
         machine_ids = OrderedDict()
-        for i, name in enumerate(data.columns[6:]):
+        for i, name in enumerate(df_scenario.columns[9:]):
             machine_ids[int(i)] = name
 
         due_dates = np.zeros(num_jobs)
-        for i, due_date in zip(data["Job_Index"].unique(), data["Due_Date"].unique()):
+        for i, due_date in zip(df_scenario["Job_Index"].unique(), df_scenario["Due_Date"].unique()):
             due_dates[int(i)] = due_date
 
-        return data, num_jobs, num_operations, num_machines, job_ids, machine_ids, due_dates
+        return df_scenario, df_initial, num_jobs, num_operations, num_machines, job_ids, machine_ids, due_dates
 
     def _get_mask(self):
         mask_pairs = np.zeros((self.num_jobs,self.num_machines), dtype=bool)
@@ -299,8 +306,8 @@ class FlexibleJobShop:
 
                     if k < self.look_ahead:
                         # Operation Feature
-                        f1 = np.min(eligible_options) / np.max(self.data.iloc[:, 6:])
-                        f2 = np.max(eligible_options) / np.max(self.data.iloc[:, 6:])
+                        f1 = np.min(eligible_options) / np.max(self.df_scenario.iloc[:, 9:])
+                        f2 = np.max(eligible_options) / np.max(self.df_scenario.iloc[:, 9:])
                         f3 = np.mean(eligible_options) / job_proctime_sum
                         f4 = len(eligible_options) / self.num_machines
 
@@ -439,15 +446,17 @@ class FlexibleJobShop:
         return state
 
     def _calculate_reward(self):
-        reward = 0.0
-        if self.sim_env.now - self.decision_time > 0:
-            for job_id, waiting_start in self.monitor.delay.items():
-                reward += - (self.sim_env.now - waiting_start)  # / (self.sim_env.now - self.decision_time)
-                self.monitor.delay[job_id] = self.sim_env.now
+        # reward = 0.0
+        # if self.sim_env.now - self.decision_time > 0:
+        #     for job_id, waiting_start in self.monitor.delay.items():
+        #         reward += - (self.sim_env.now - waiting_start)  # / (self.sim_env.now - self.decision_time)
+        #         self.monitor.delay[job_id] = self.sim_env.now
 
-        # tardiness = np.sum(np.maximum(self.completion_time - self.due_dates, 0))
-        # tardiness_updated = np.sum(np.maximum(self.completion_time_updated - self.due_dates, 0))
-        # reward = - (tardiness_updated - tardiness)
+        tardiness = np.sum(np.maximum(self.completion_time - self.due_dates, 0))
+        tardiness_updated = np.sum(np.maximum(self.completion_time_updated - self.due_dates, 0))
+        reward = - (tardiness_updated - tardiness)
+
+        # reward = - (self.model["Sink"].total_tardiness - self.total_tardiness)
 
         return reward
 
@@ -456,25 +465,33 @@ class FlexibleJobShop:
         monitor = Monitor(self.record_events)
 
         jobs = []
-        df_scenario_group = self.data.groupby(by=["Job_Name", "Job_Index", "Arrival_Date", "Due_Date"])
+        df_scenario_group = self.df_scenario.groupby(by=["Job_Name", "Job_Index", "Arrival_Date", "Due_Date"])
 
         for idx, group in df_scenario_group:
             job_name, job_index, arrival_date, due_date = idx
 
             operations = []
             for i, row in group.iterrows():
-                options = np.array(row.iloc[6:].to_list())
-                operation = Operation(row["Operation_Name"], row["Operation_Index"], options=options)
+                options = np.array(row.iloc[9:].to_list())
+                operation = Operation(row["Operation_Name"], row["Operation_Index"],
+                                      row["Start_Date"], row["Finish_Date"], options=options)
                 operations.append(operation)
 
-            job = Job(job_name, job_index, arrival_date, due_date, operations)
+            initial_step = 0
+            initial_machine = None
+            if job_name in self.df_initial["Job_Name"].tolist():
+                initial_job = self.df_initial[self.df_initial["Job_Name"] == job_name]
+                initial_step = initial_job["Order"].tolist()[0]
+                initial_machine = initial_job["Initial_Machine"].tolist()[0]
+
+            job = Job(job_name, job_index, arrival_date, due_date, operations, initial_step, initial_machine)
             jobs.append(job)
 
-        jobs = sorted(jobs, key=lambda x: x.arrival_date)
+        jobs = sorted(jobs, key=lambda x: x.operations[x.step].start_expected)
 
         model = {}
         model["Source"] = Source(sim_env, "Source", jobs, model, monitor)
-        for i, name in enumerate(self.data.columns[6:]):
+        for i, name in enumerate(self.df_scenario.columns[9:]):
             machine = Machine(sim_env, name, i, model, monitor, capacity=1)
             model[name] = machine
         model["Buffer"] = Buffer(sim_env, "Buffer", model, monitor)

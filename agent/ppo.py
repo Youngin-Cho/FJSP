@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 from torch.optim import Adam
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import StepLR, OneCycleLR
 from torch.distributions.categorical import Categorical
 from torch.nn.functional import smooth_l1_loss
 from torch_geometric.data import Batch
@@ -115,6 +115,7 @@ class Agent:
         self.policy = SchedulingNetwork(meta_data, num_nodes, input_dim_g, input_dim_pair, config).to(device)
         self.optimizer = Adam(self.policy.parameters(), lr=self.lr)
         self.scheduler = StepLR(optimizer=self.optimizer, step_size=self.lr_step, gamma=self.lr_decay)
+        # self.scheduler = OneCycleLR(optimizer=self.optimizer, max_lr=0.00001, total_steps=1000, anneal_strategy='linear')
 
     def collect_sample(self, env_id, state, action, reward, value, done, log_probs):
         self.memory.put(env_id, state, action, reward, value, done, log_probs)

@@ -12,8 +12,7 @@ def evaluate(agent, device, config):
     with torch.no_grad():
         total_tardiness_lst = []
         for path in val_paths:
-            data_src = pd.read_excel(config.val_dir + path, sheet_name="scenario", engine='openpyxl')
-            env = FlexibleJobShop(data_src, config.look_ahead, device, record_events=config.record_events)
+            env = FlexibleJobShop(config.val_dir + path, config.look_ahead, device, record_events=config.record_events)
 
             state = env.reset()
 

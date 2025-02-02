@@ -2,9 +2,11 @@ import pandas as pd
 
 
 class Operation:
-    def __init__(self, name, id, options):
+    def __init__(self, name, id, start_expected, finish_expected, options):
         self.name = name
         self.id = id
+        self.start_expected = start_expected
+        self.finish_expected = finish_expected
         self.options = options
 
         self.progress = 0.0
@@ -17,16 +19,19 @@ class Operation:
 
 
 class Job:
-    def __init__(self, name, id, arrival_date, due_date, operations):
+    def __init__(self, name, id, arrival_date, due_date, operations, initial_step=0, initial_machine=None):
         self.name = name
         self.id = id
         self.arrival_date = arrival_date
         self.due_date = due_date
         self.operations = operations
+        self.initial_step = initial_step
+        self.initial_machine = initial_machine
 
-        self.step = 0
+        self.step = initial_step
+        self.current_machine = initial_machine
+
         self.waiting_start = 0
-        self.current_machine = None
         self.actual_arrival_date = 0
 
     def get_current_operation(self):
@@ -54,15 +59,27 @@ class Source:
         for job in self.jobs:
             self.monitor.jobs_before_arrival[job.id] = job
             for i, operation in enumerate(job.operations):
-                self.monitor.operations_unscheduled[operation.id] = operation
+                if i < job.step:
+                    self.monitor.operations_done[operation.id] = operation
+                else:
+                    self.monitor.operations_unscheduled[operation.id] = operation
 
         while True:
             job = self.jobs[self.sent]
+            operation = job.get_current_operation()
 
-            IAT = job.arrival_date - self.env.now
+            IAT = operation.start_expected - self.env.now
             if IAT > 0:
                 yield self.env.timeout(IAT)
-            self.env.process(self.arrive(job))
+
+            if job.initial_machine is not None:
+                self.model[job.initial_machine].put(job)
+                if job.initial_machine == "Buffer":
+                    self.monitor.delay[job.id] = self.env.now
+                del self.monitor.jobs_before_arrival[job.id]
+                self.monitor.jobs_in_process[job.id] = job
+            else:
+                self.env.process(self.arrive(job))
 
             self.sent += 1
 
