@@ -15,12 +15,14 @@ def convert_state(state, device, flags=None):
         fea_g = Batch.from_data_list([state[i].fea_g for i in range(len(state)) if flags[i]])
         fea_pair = torch.FloatTensor(np.stack([state[i].fea_pair for i in range(len(state)) if flags[i]], axis=0)).to(device)
         mask_pair = torch.from_numpy(np.stack([state[i].mask_pair for i in range(len(state)) if flags[i]], axis=0)).to(device)
+        fea_pdr = np.stack([state[i].fea_pdr for i in range(len(state)) if flags[i]], axis=0)
     else:
         fea_g = Batch.from_data_list([state.fea_g])
         fea_pair = torch.FloatTensor(np.array([state.fea_pair])).to(device)
         mask_pair = torch.BoolTensor(np.array([state.mask_pair])).to(device)
+        fea_pdr = np.array([state.fea_pdr])
 
-    return fea_g, fea_pair, mask_pair
+    return fea_g, fea_pair, mask_pair, fea_pdr
 
 
 def clip_grad_norms(param_groups, max_norm=math.inf):
@@ -97,7 +99,7 @@ class Agent:
     def __init__(self, meta_data, num_nodes, input_dim_g, input_dim_pair, config, device):
         self.device = device
 
-        self.n_envs = config.n_envs
+        self.n_envs = config.n_envs_RL + config.n_envs_SPT + config.n_envs_MDD
         self.max_grad_norm = config.max_grad_norm
         self.lr = config.lr
         self.lr_decay = config.lr_decay
@@ -111,7 +113,7 @@ class Agent:
         self.V_coeff = config.V_coeff
         self.E_coeff = config.E_coeff
 
-        self.memory = RollOutMemory(config.n_envs, device)
+        self.memory = RollOutMemory(self.n_envs, device)
         self.policy = SchedulingNetwork(meta_data, num_nodes, input_dim_g, input_dim_pair, config).to(device)
         self.optimizer = Adam(self.policy.parameters(), lr=self.lr)
         self.scheduler = StepLR(optimizer=self.optimizer, step_size=self.lr_step, gamma=self.lr_decay)
@@ -120,14 +122,28 @@ class Agent:
     def collect_sample(self, env_id, state, action, reward, value, done, log_probs):
         self.memory.put(env_id, state, action, reward, value, done, log_probs)
 
-    def get_action(self, state, flags=None):
-        fea_g, fea_pair, mask_pair = convert_state(state, self.device, flags)
+    def get_action(self, state, action_flags=None, guide_flags=None):
+        fea_g, fea_pair, mask_pair, fea_pdr = convert_state(state, self.device, action_flags)
 
         with torch.no_grad():
             probs, value = self.policy(fea_g, fea_pair, mask_pair)
 
         dist = Categorical(probs)
         action = dist.sample()
+
+        if guide_flags is not None:
+            action_guide = torch.zeros_like(action)
+            fea_pdr = fea_pdr.reshape((fea_pdr.shape[0], -1))
+            fea_pdr[~mask_pair.reshape((fea_pdr.shape[0], -1))] = 0.0
+            for i in range(self.n_envs):
+                max_value = np.max(fea_pdr[i])
+                candidates = np.where(fea_pdr[i] == max_value)[0]
+                temp = np.random.choice(candidates)
+                action_guide[i] = temp
+
+            idx = guide_flags[action_flags]
+            action[idx] = action_guide[idx]
+
         log_probs = dist.log_prob(action)
 
         if type(state) is list:
@@ -141,7 +157,7 @@ class Agent:
         flags = torch.BoolTensor(flags).to(self.device)
 
         with (torch.no_grad()):
-            fea_g, fea_pair, mask_pair = convert_state(last_state, self.device, flags=[True for _ in range(self.n_envs)])
+            fea_g, fea_pair, mask_pair, fea_pdr = convert_state(last_state, self.device, flags=[True for _ in range(self.n_envs)])
             _, last_value = self.policy(fea_g, fea_pair, mask_pair)
             last_value = last_value * dones[:, -1:]
 

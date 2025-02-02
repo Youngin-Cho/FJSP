@@ -41,19 +41,25 @@ class State:
         self.fea_pair = np.zeros((num_jobs, num_machines, input_dim_pair))
         self.mask_pair = np.zeros((num_jobs, num_machines), dtype=bool)
 
-    def update(self, fea_g, fea_pair, mask_pair):
+        self.fea_pdr = np.zeros((num_jobs, num_machines))
+
+    def update(self, fea_g, fea_pair, mask_pair, fea_pdr=None):
         self.fea_g = fea_g
         self.fea_pair = fea_pair
         self.mask_pair = mask_pair
 
+        if fea_pdr is not None:
+            self.fea_pdr = fea_pdr
+
 
 class FlexibleJobShop:
-    def __init__(self, data_src, look_ahead, device, algorithm='RL', record_events=False):
+    def __init__(self, data_src, look_ahead, device, algorithm='RL', record_events=False, guide=None):
         self.data_src = data_src
         self.look_ahead = look_ahead
         self.device = device
         self.algorithm = algorithm
         self.record_events = record_events
+        self.guide = guide
 
         self.df_scenario, self.df_initial, self.num_jobs, self.num_operations, self.num_machines, \
             self.job_ids, self.machine_ids, self.due_dates = self._initialize()
@@ -99,7 +105,7 @@ class FlexibleJobShop:
                 self.actions_done = []
 
             if self.algorithm == "RL":
-                next_state = self._get_state_for_RL()
+                next_state = self._get_state_for_RL(self.guide)
             else:
                 next_state = self._get_state_for_heuristics()
 
@@ -242,12 +248,15 @@ class FlexibleJobShop:
 
         return mask_pairs
 
-    def _get_state_for_RL(self):
+    def _get_state_for_RL(self, guide=None):
         fea_j = np.zeros((self.num_jobs, self.input_dim_j + self.look_ahead * self.input_dim_o))
         fea_m = np.zeros((self.num_machines, self.input_dim_m))
         fea_pair = np.zeros((self.num_jobs, self.num_machines, self.input_dim_pair))
 
         edge_m_to_j, edge_j_to_m = [[], []], [[], []]
+
+        if guide is not None:
+            fea_pdr = np.zeros((self.num_jobs, self.num_machines))
 
         if len(self.monitor.jobs_completed) < self.num_jobs:
             proctime_remaining = []
@@ -295,6 +304,15 @@ class FlexibleJobShop:
                         edge_j_to_m[1].append(i)
                         edge_m_to_j[0].append(i)
                         edge_m_to_j[1].append(j)
+
+                if guide is not None and job.id in self.monitor.jobs_in_queue.values():
+                    if guide == "SPT":
+                        fea_pdr[job.id, first_options != 0] = 1 / first_options[first_options != 0]
+                    elif guide == "MDD":
+                        fea_pdr[job.id, first_options != 0] = 1 / np.maximum(job.due_date, first_options[first_options != 0] + self.sim_env.now)
+                    elif guide == "ATC":
+                        fea_pdr[job.id, first_options != 0] = 1 / first_options[first_options != 0] * np.exp(
+                            - np.maximum(job.due_date - self.sim_env.now - first_options[first_options != 0], 0) / first_options[first_options != 0])
 
                 for k, operation in enumerate(job.operations[job.step:]):
                     flag = False
@@ -417,7 +435,11 @@ class FlexibleJobShop:
         # mask_pair = torch.from_numpy(mask_pair).type(torch.bool).to(self.device)
 
         state = State(self.num_jobs, self.num_machines, self.look_ahead, self.device)
-        state.update(fea_g, fea_pair, mask_pair)
+
+        if guide is None:
+            state.update(fea_g, fea_pair, mask_pair)
+        else:
+            state.update(fea_g, fea_pair, mask_pair, fea_pdr)
 
         return state
 

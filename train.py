@@ -36,7 +36,7 @@ def get_config():
 
     parser.add_argument("--look_ahead", type=int, default=2, help="look-ahead parameter")
     parser.add_argument("--embed_dim", type=int, default=128, help="node embedding dimension")
-    parser.add_argument("--n_heads", type=int, default=8, help="number of heads in MHA sub-layers")
+    parser.add_argument("--n_heads", type=int, default=4, help="number of heads in MHA sub-layers")
     parser.add_argument("--n_layers_ff", type=int, default=2, help="number of FFN layers")
     parser.add_argument("--n_layers_hgt", type=int, default=2, help="number of MLAN layers")
     parser.add_argument("--n_layers_actor", type=int, default=2, help="number of Actor layers")
@@ -45,8 +45,10 @@ def get_config():
     parser.add_argument('--hidden_dim_critic', type=int, default=256, help='Dimension of hidden layers in Critic')
 
     parser.add_argument("--n_episodes", type=int, default=1000, help="number of episodes")
-    parser.add_argument("--n_envs", type=int, default=20, help="number of environments")
-    parser.add_argument("--lr", type=float, default=0.00005, help="learning rate")
+    parser.add_argument("--n_envs_RL", type=int, default=20, help="number of environments")
+    parser.add_argument("--n_envs_SPT", type=int, default=0, help="number of environments")
+    parser.add_argument("--n_envs_MDD", type=int, default=0, help="number of environments")
+    parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
     parser.add_argument("--lr_decay", type=float, default=1.0, help="learning rate decay ratio")
     parser.add_argument("--lr_step", type=int, default=250, help="step size to reduce learning rate")
     parser.add_argument('--max_grad_norm', type=float, default=0.0,
@@ -82,7 +84,10 @@ if __name__ == "__main__":
     model_path = config.model_path
 
     n_episodes = config.n_episodes
-    n_envs = config.n_envs
+    n_envs_RL = config.n_envs_RL
+    n_envs_SPT = config.n_envs_SPT
+    n_envs_MDD = config.n_envs_MDD
+    n_envs = n_envs_RL + n_envs_SPT + n_envs_MDD
 
     eval_every = config.eval_every
     save_every = config.save_every
@@ -123,7 +128,11 @@ if __name__ == "__main__":
     data_generator = DataGenerator(config)
     # data_instance = data_generator.generate()
 
-    envs = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events) for _ in range(n_envs)]
+    envs_RL = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events) for _ in range(n_envs_RL)]
+    envs_SPT = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events, guide="SPT") for _ in range(n_envs_SPT)]
+    envs_MDD = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events, guide="MDD") for _ in range(n_envs_MDD)]
+    envs = envs_RL + envs_SPT + envs_MDD
+
     agent = Agent(envs[0].meta_data, envs[0].num_nodes, envs[0].input_dim_g, envs[0].input_dim_pair, config, device)
 
     if not use_vessl:
@@ -156,12 +165,19 @@ if __name__ == "__main__":
         state_lst = [envs[i].reset() for i in range(n_envs)]
         reward_lst = [0.0 for i in range(n_envs)]
         done_lst = [False for i in range(n_envs)]
-        action_flags = [True for i in range(n_envs)]
+        action_flags = np.array([True for i in range(n_envs)])
+
+        if n_envs == n_envs_RL:
+            guide_flags = None
+        else:
+            guide_flags = np.array([False for i in range(n_envs_RL)]
+                                   + [True for i in range(n_envs_SPT)]
+                                   + [True for i in range(n_envs_MDD)])
 
         while not all(done_lst):
             update_flags = [[] for _ in range(n_envs)]
             for t in range(config.T_horizon):
-                action, log_prob, state_value = agent.get_action(state_lst, action_flags)
+                action, log_prob, state_value = agent.get_action(state_lst, action_flags, guide_flags)
                 action_idx = 0
                 for i, env in enumerate(envs):
                     if done_lst[i]:
