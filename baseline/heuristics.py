@@ -8,7 +8,9 @@ class Heuristic:
         self.num_machines = num_machines
 
     def act(self, state):
+        mask_pair = state.mask_pair.flatten()
         priority_index = state.priority_index.flatten()
+        priority_index[~mask_pair] = 0.0
         candidates = np.where(priority_index == np.max(priority_index))[0]
         action = np.random.choice(candidates)
         return action
