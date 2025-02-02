@@ -10,8 +10,6 @@ from environment.data import DataGenerator
 from environment.simulation import *
 from utils.visualize import WIP_graph
 
-from datetime import datetime
-
 
 class StatePDR:
     def __init__(self, num_jobs, num_machines):
@@ -105,7 +103,7 @@ class FlexibleJobShop:
                 self.actions_done = []
 
             if self.algorithm == "RL":
-                next_state = self._get_state_for_RL(self.guide)
+                next_state = self._get_state_for_RL()
             else:
                 next_state = self._get_state_for_heuristics()
 
@@ -248,14 +246,14 @@ class FlexibleJobShop:
 
         return mask_pairs
 
-    def _get_state_for_RL(self, guide=None):
+    def _get_state_for_RL(self):
         fea_j = np.zeros((self.num_jobs, self.input_dim_j + self.look_ahead * self.input_dim_o))
         fea_m = np.zeros((self.num_machines, self.input_dim_m))
         fea_pair = np.zeros((self.num_jobs, self.num_machines, self.input_dim_pair))
 
         edge_m_to_j, edge_j_to_m = [[], []], [[], []]
 
-        if guide is not None:
+        if self.guide is not None:
             fea_pdr = np.zeros((self.num_jobs, self.num_machines))
 
         if len(self.monitor.jobs_completed) < self.num_jobs:
@@ -305,12 +303,12 @@ class FlexibleJobShop:
                         edge_m_to_j[0].append(i)
                         edge_m_to_j[1].append(j)
 
-                if guide is not None and job.id in self.monitor.jobs_in_queue.values():
-                    if guide == "SPT":
+                if (self.guide is not None) and (job.id in self.monitor.jobs_in_queue.keys()):
+                    if self.guide == "SPT":
                         fea_pdr[job.id, first_options != 0] = 1 / first_options[first_options != 0]
-                    elif guide == "MDD":
+                    elif self.guide == "MDD":
                         fea_pdr[job.id, first_options != 0] = 1 / np.maximum(job.due_date, first_options[first_options != 0] + self.sim_env.now)
-                    elif guide == "ATC":
+                    elif self.guide == "ATC":
                         fea_pdr[job.id, first_options != 0] = 1 / first_options[first_options != 0] * np.exp(
                             - np.maximum(job.due_date - self.sim_env.now - first_options[first_options != 0], 0) / first_options[first_options != 0])
 
@@ -436,7 +434,7 @@ class FlexibleJobShop:
 
         state = State(self.num_jobs, self.num_machines, self.look_ahead, self.device)
 
-        if guide is None:
+        if self.guide is None:
             state.update(fea_g, fea_pair, mask_pair)
         else:
             state.update(fea_g, fea_pair, mask_pair, fea_pdr)

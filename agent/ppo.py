@@ -135,7 +135,7 @@ class Agent:
             action_guide = torch.zeros_like(action)
             fea_pdr = fea_pdr.reshape((fea_pdr.shape[0], -1))
             fea_pdr[~mask_pair.reshape((fea_pdr.shape[0], -1))] = 0.0
-            for i in range(self.n_envs):
+            for i in range(fea_pdr.shape[0]):
                 max_value = np.max(fea_pdr[i])
                 candidates = np.where(fea_pdr[i] == max_value)[0]
                 temp = np.random.choice(candidates)

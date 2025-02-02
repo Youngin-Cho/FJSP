@@ -45,9 +45,9 @@ def get_config():
     parser.add_argument('--hidden_dim_critic', type=int, default=256, help='Dimension of hidden layers in Critic')
 
     parser.add_argument("--n_episodes", type=int, default=1000, help="number of episodes")
-    parser.add_argument("--n_envs_RL", type=int, default=20, help="number of environments")
-    parser.add_argument("--n_envs_SPT", type=int, default=0, help="number of environments")
-    parser.add_argument("--n_envs_MDD", type=int, default=0, help="number of environments")
+    parser.add_argument("--n_envs_RL", type=int, default=10, help="number of environments")
+    parser.add_argument("--n_envs_SPT", type=int, default=5, help="number of environments")
+    parser.add_argument("--n_envs_MDD", type=int, default=5, help="number of environments")
     parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
     parser.add_argument("--lr_decay", type=float, default=1.0, help="learning rate decay ratio")
     parser.add_argument("--lr_step", type=int, default=250, help="step size to reduce learning rate")
@@ -243,7 +243,10 @@ if __name__ == "__main__":
 
         if e % reset_every == 0:
             # data_instance = data_generator.generate()
-            envs = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events) for _ in range(n_envs)]
+            envs_RL = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events) for _ in range(n_envs_RL)]
+            envs_SPT = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events, guide="SPT") for _ in range(n_envs_SPT)]
+            envs_MDD = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events, guide="MDD") for _ in range(n_envs_MDD)]
+            envs = envs_RL + envs_SPT + envs_MDD
 
     if not use_vessl:
         writer.close()
