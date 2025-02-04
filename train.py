@@ -34,26 +34,27 @@ def get_config():
     parser.add_argument("--iat_avg", type=float, default=4, help="average inter-arrival time")
     parser.add_argument("--ddt", type=float, default=1.2, help="due date tardiness")
 
-    parser.add_argument("--look_ahead", type=int, default=2, help="look-ahead parameter")
+    parser.add_argument("--state_encoding", type=str, default="DG", help="state encoding method")
+    parser.add_argument("--look_ahead", type=int, default=3, help="look-ahead parameter")
     parser.add_argument("--embed_dim", type=int, default=128, help="node embedding dimension")
     parser.add_argument("--n_heads", type=int, default=4, help="number of heads in MHA sub-layers")
     parser.add_argument("--n_layers_ff", type=int, default=2, help="number of FFN layers")
-    parser.add_argument("--n_layers_hgt", type=int, default=2, help="number of MLAN layers")
+    # parser.add_argument('--hidden_dim_ff', type=int, default=512, help='Dimension of hidden layers in FFN')
+    parser.add_argument("--n_layers_hgt", type=int, default=2, help="number of HGT layers")
+    # parser.add_argument("--n_layers_transformer", type=int, default=2, help="number of Transformer layers")
     parser.add_argument("--n_layers_actor", type=int, default=2, help="number of Actor layers")
     parser.add_argument("--n_layers_critic", type=int, default=2, help="number of Critic layers")
-    parser.add_argument('--hidden_dim_actor', type=int, default=384, help='Dimension of hidden layers in Actor')
-    parser.add_argument('--hidden_dim_critic', type=int, default=256, help='Dimension of hidden layers in Critic')
+    parser.add_argument('--hidden_dim_actor', type=int, default=128, help='Dimension of hidden layers in Actor')
+    parser.add_argument('--hidden_dim_critic', type=int, default=128, help='Dimension of hidden layers in Critic')
 
-    parser.add_argument("--n_episodes", type=int, default=1000, help="number of episodes")
-    parser.add_argument("--n_envs_RL", type=int, default=10, help="number of environments")
-    parser.add_argument("--n_envs_SPT", type=int, default=5, help="number of environments")
-    parser.add_argument("--n_envs_MDD", type=int, default=5, help="number of environments")
-    parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
+    parser.add_argument("--n_episodes", type=int, default=10000, help="number of episodes")
+    parser.add_argument("--n_envs", type=int, default=1, help="number of environments")
+    parser.add_argument("--lr", type=float, default=0.00005, help="learning rate")
     parser.add_argument("--lr_decay", type=float, default=1.0, help="learning rate decay ratio")
-    parser.add_argument("--lr_step", type=int, default=250, help="step size to reduce learning rate")
+    parser.add_argument("--lr_step", type=int, default=100, help="step size to reduce learning rate")
     parser.add_argument('--max_grad_norm', type=float, default=0.0,
                         help='Maximum L2 norm for gradient clipping, default 1.0 (0 to disable clipping)')
-    parser.add_argument("--gamma", type=float, default=1.00, help="discount ratio")
+    parser.add_argument("--gamma", type=float, default=0.98, help="discount ratio")
     parser.add_argument("--lmbda", type=float, default=0.95, help="GAE parameter")
     parser.add_argument("--eps_clip", type=float, default=0.2, help="clipping parameter")
     parser.add_argument("--K_epoch", type=int, default=3, help="optimization epoch")
@@ -84,10 +85,9 @@ if __name__ == "__main__":
     model_path = config.model_path
 
     n_episodes = config.n_episodes
-    n_envs_RL = config.n_envs_RL
-    n_envs_SPT = config.n_envs_SPT
-    n_envs_MDD = config.n_envs_MDD
-    n_envs = n_envs_RL + n_envs_SPT + n_envs_MDD
+    n_envs = config.n_envs
+
+    state_encoding = config.state_encoding
 
     eval_every = config.eval_every
     save_every = config.save_every
@@ -126,12 +126,8 @@ if __name__ == "__main__":
         json.dump(vars(config), f, indent=4)
 
     data_generator = DataGenerator(config)
-    # data_instance = data_generator.generate()
-
-    envs_RL = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events) for _ in range(n_envs_RL)]
-    envs_SPT = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events, guide="SPT") for _ in range(n_envs_SPT)]
-    envs_MDD = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events, guide="MDD") for _ in range(n_envs_MDD)]
-    envs = envs_RL + envs_SPT + envs_MDD
+    envs = [FlexibleJobShop(data_generator, config.look_ahead, device,
+                            state_encoding=state_encoding, record_events=record_events) for _ in range(n_envs)]
 
     agent = Agent(envs[0].meta_data, envs[0].num_nodes, envs[0].input_dim_g, envs[0].input_dim_pair, config, device)
 
@@ -159,6 +155,9 @@ if __name__ == "__main__":
 
         n_update = 0
         loss_episode = 0.0
+        policy_loss_episode = 0.0
+        value_loss_episode = 0.0
+        entropy_loss_episode = 0.0
         grad_norms_episode = 0.0
         grad_norms_clipped_episode = 0.0
 
@@ -167,21 +166,15 @@ if __name__ == "__main__":
         done_lst = [False for i in range(n_envs)]
         action_flags = np.array([True for i in range(n_envs)])
 
-        if n_envs == n_envs_RL:
-            guide_flags = None
-        else:
-            guide_flags = np.array([False for i in range(n_envs_RL)]
-                                   + [True for i in range(n_envs_SPT)]
-                                   + [True for i in range(n_envs_MDD)])
-
         while not all(done_lst):
             update_flags = [[] for _ in range(n_envs)]
             for t in range(config.T_horizon):
-                action, log_prob, state_value = agent.get_action(state_lst, action_flags, guide_flags)
+                action, log_prob, state_value = agent.get_action(state_lst, action_flags)
                 action_idx = 0
                 for i, env in enumerate(envs):
                     if done_lst[i]:
-                        next_state, reward, done = State(env.num_jobs, env.num_machines, config.look_ahead, device), 0.0, True
+                        next_state, reward, done = State(env.num_jobs, env.num_operations, env.num_machines,
+                                                         config.look_ahead, device, state_encoding), 0.0, True
                         agent.collect_sample(i, state_lst[i], 0, 0.0, 0.0, True, 0.0)
                         update_flags[i].append(False)
                     else:
@@ -202,10 +195,14 @@ if __name__ == "__main__":
                 if all(done_lst):
                     break
 
-            loss, grad_norms, grad_norms_clipped = agent.update(state_lst, update_flags)
+            loss, policy_loss, value_loss, entropy_loss, grad_norms, grad_norms_clipped \
+                = agent.update(state_lst, update_flags)
 
             n_update += 1
             loss_episode += loss
+            policy_loss_episode += policy_loss
+            value_loss_episode += value_loss
+            entropy_loss_episode += entropy_loss
             grad_norms_episode += grad_norms
             grad_norms_clipped_episode += grad_norms_clipped
 
@@ -218,12 +215,18 @@ if __name__ == "__main__":
 
         if use_vessl:
             vessl.log(payload={"Train/Reward": np.mean(reward_lst),
-                               "Train/Loss": loss_episode / n_update,
+                               "Loss/Loss": loss_episode / n_update,
+                               "Loss/PolicyLoss": policy_loss_episode / n_update,
+                               "Loss/ValueLoss": value_loss_episode / n_update,
+                               "Loss/EntropyLoss": entropy_loss_episode / n_update,
                                "Train/GradNorms": grad_norms_episode / n_update,
                                "Train/GradNormsClipped": grad_norms_clipped_episode / n_update}, step=e)
         else:
             writer.add_scalar("Training/Reward", np.mean(reward_lst), e)
-            writer.add_scalar("Training/Loss", loss_episode / n_update, e)
+            writer.add_scalar("Loss/Loss", loss_episode / n_update, e)
+            writer.add_scalar("Loss/PolicyLoss", policy_loss_episode / n_update, e)
+            writer.add_scalar("Loss/ValueLoss", value_loss_episode / n_update, e)
+            writer.add_scalar("Loss/EntropyLoss", entropy_loss_episode / n_update, e)
             writer.add_scalar("Training/GradNorms", grad_norms_episode / n_update, e)
             writer.add_scalar("Training/GradNormsClipped", grad_norms_clipped_episode / n_update, e)
 
@@ -242,11 +245,8 @@ if __name__ == "__main__":
             agent.save(e, model_dir)
 
         if e % reset_every == 0:
-            # data_instance = data_generator.generate()
-            envs_RL = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events) for _ in range(n_envs_RL)]
-            envs_SPT = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events, guide="SPT") for _ in range(n_envs_SPT)]
-            envs_MDD = [FlexibleJobShop(data_generator, config.look_ahead, device, record_events=record_events, guide="MDD") for _ in range(n_envs_MDD)]
-            envs = envs_RL + envs_SPT + envs_MDD
+            envs = [FlexibleJobShop(data_generator, config.look_ahead, device,
+                                    state_encoding=state_encoding,record_events=record_events) for _ in range(n_envs)]
 
     if not use_vessl:
         writer.close()

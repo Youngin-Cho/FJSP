@@ -12,7 +12,8 @@ def evaluate(agent, device, config):
     with torch.no_grad():
         total_tardiness_lst = []
         for path in val_paths:
-            env = FlexibleJobShop(config.val_dir + path, config.look_ahead, device, record_events=config.record_events)
+            env = FlexibleJobShop(config.val_dir + path, config.look_ahead, device,
+                                  state_encoding=config.state_encoding, record_events=config.record_events)
 
             state = env.reset()
 

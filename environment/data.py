@@ -71,24 +71,25 @@ class DataGenerator:
             offset += num_operations
 
         df_scenario = pd.DataFrame(temp, columns=columns)
+        df_initial = pd.DataFrame({}, columns=columns)
 
-        start = np.random.randint(df_scenario["Arrival_Date"].min(), int(min(expected_finish_dates)))
-        df_initial = df_scenario[(df_scenario["Start_Date"] <= start) & (df_scenario["Finish_Date"] >= start)]
-        df_initial = df_initial.sort_values(by=["Start_Date"])
-        df_initial = df_initial.reset_index(drop=True)
-
-        occupied_machines = []
-        for i, row in df_initial.iterrows():
-            machine_list = row.iloc[9:]
-            machine_list = machine_list[(machine_list != 0) & ~(machine_list.index.isin(occupied_machines))]
-
-            if len(machine_list) == 0:
-                machine = "Buffer"
-            else:
-                machine = machine_list.sample(n=1).index.to_numpy()[0]
-                occupied_machines.append(machine)
-
-            df_initial.loc[i, "Initial_Machine"] = machine
+        # start = np.random.randint(df_scenario["Arrival_Date"].min(), int(min(expected_finish_dates)))
+        # df_initial = df_scenario[(df_scenario["Start_Date"] <= start) & (df_scenario["Finish_Date"] >= start)]
+        # df_initial = df_initial.sort_values(by=["Start_Date"])
+        # df_initial = df_initial.reset_index(drop=True)
+        #
+        # occupied_machines = []
+        # for i, row in df_initial.iterrows():
+        #     machine_list = row.iloc[9:]
+        #     machine_list = machine_list[(machine_list != 0) & ~(machine_list.index.isin(occupied_machines))]
+        #
+        #     if len(machine_list) == 0:
+        #         machine = "Buffer"
+        #     else:
+        #         machine = machine_list.sample(n=1).index.to_numpy()[0]
+        #         occupied_machines.append(machine)
+        #
+        #     df_initial.loc[i, "Initial_Machine"] = machine
 
         if file_path is not None:
             writer = pd.ExcelWriter(file_path)
