@@ -222,12 +222,12 @@ class FlexibleJobShop:
     def _initialize(self):
         if type(self.data_src) is DataGenerator:
             df_scenario, df_initial = self.data_src.generate()
-            flag = True
-            while flag:
-                df_scenario, df_initial = self.data_src.generate()
-                max_wip = WIP_graph(df_scenario)
-                if max_wip <= 20:
-                    flag = False
+            # flag = True
+            # while flag:
+            #     df_scenario, df_initial = self.data_src.generate()
+            #     max_wip = WIP_graph(df_scenario)
+            #     if max_wip <= 20:
+            #         flag = False
         else:
             df_scenario = pd.read_excel(self.data_src, sheet_name="scenario", engine='openpyxl')
             df_initial = pd.read_excel(self.data_src, sheet_name="initial", engine='openpyxl')
