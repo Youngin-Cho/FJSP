@@ -23,7 +23,7 @@ class StatePDR:
 
 class State:
     def __init__(self, num_jobs, num_operations, num_machines, look_ahead, device, state_encoding="DG",
-                 input_dim_o=7, input_dim_j=4, input_dim_m=6, input_dim_pair=2):
+                 input_dim_o=9, input_dim_j=4, input_dim_m=6, input_dim_pair=2):
 
         if state_encoding == "DG":
             fea_o = torch.zeros((num_operations, input_dim_o)).to(device)
@@ -72,7 +72,7 @@ class FlexibleJobShop:
         self.df_scenario, self.df_initial, self.num_jobs, self.num_operations, self.num_machines, \
             self.job_ids, self.machine_ids, self.due_dates, self.estimated_makespan = self._initialize()
 
-        self.input_dim_o = 7
+        self.input_dim_o = 9
         self.input_dim_j = 4
         self.input_dim_m = 6
         self.input_dim_pair = 2
@@ -392,16 +392,16 @@ class FlexibleJobShop:
                     f2 = np.max(eligible_options) / np.max(self.df_scenario.iloc[:, 9:])
                     f3 = np.mean(eligible_options) / job_proctime_sum
                     f4 = len(eligible_options) / self.num_machines
-                    # f5 = earliest_finish_time / self.estimated_makespan
-                    # f6 = latest_finish_time / self.estimated_makespan
+                    f5 = earliest_finish_time / self.estimated_makespan
+                    f6 = latest_finish_time / self.estimated_makespan
 
                     if self.state_encoding == "DG":
                         fea_o[operation.id, :3] = f0
-                        fea_o[operation.id, 3:] = [f1, f2, f3, f4] #, f5, f6]
+                        fea_o[operation.id, 3:] = [f1, f2, f3, f4, f5, f6]
                     elif self.state_encoding == "BG" and k < self.look_ahead:
                         first_idx =  self.input_dim_j + k * self.input_dim_o
                         last_idx = self.input_dim_j + (k + 1) * self.input_dim_o
-                        fea_j[job.id, first_idx:last_idx] = [f1, f2, f3, f4] #, f5, f6]
+                        fea_j[job.id, first_idx:last_idx] = [f1, f2, f3, f4, f5, f6]
 
                     if self.state_encoding == "DG":
                         if k >= job.step:
