@@ -32,6 +32,6 @@ def WIP_graph(data, graph=False, filepath=None):
 
 if __name__ == "__main__":
     import pandas as pd
-    data_path = "../input/new_validation/30-12/instance-2.xlsx"
+    data_path = "../input/new_validation/15-6/instance-2.xlsx"
     data = pd.read_excel(data_path)
     wip = WIP_graph(data, graph=True)
