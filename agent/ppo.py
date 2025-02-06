@@ -164,7 +164,7 @@ class Agent:
             advantage = self.gamma * self.lmbda * advantage + delta[:, i]
             advantages[:, i] = advantage
 
-        advantages = (advantages - advantages.mean(dim=1, keepdim=True)) / (advantages.std(dim=1, correction=0, keepdim=True) + 1e-8)
+        # advantages = (advantages - advantages.mean(dim=1, keepdim=True)) / (advantages.std(dim=1, correction=0, keepdim=True) + 1e-8)
 
         avg_loss = 0.0
         avg_policy_loss, avg_value_loss, avg_entropy_loss = 0.0, 0.0, 0.0
