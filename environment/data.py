@@ -1,8 +1,6 @@
 import numpy as np
 import pandas as pd
 
-from utils.visualize import WIP_graph
-
 
 class DataGenerator:
     def __init__(self, config):
@@ -103,6 +101,7 @@ class DataGenerator:
 if __name__ == '__main__':
     import os
     import argparse
+    from utils.visualize import WIP_graph
 
     def get_config():
         parser = argparse.ArgumentParser(description="FJSP")
