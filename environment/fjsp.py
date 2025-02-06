@@ -23,7 +23,7 @@ class StatePDR:
 
 class State:
     def __init__(self, num_jobs, num_operations, num_machines, look_ahead, device, state_encoding="DG",
-                 input_dim_o=9, input_dim_j=4, input_dim_m=6, input_dim_pair=2):
+                 input_dim_o=9, input_dim_j=4, input_dim_m=6, input_dim_pair=4):
 
         if state_encoding == "DG":
             fea_o = torch.zeros((num_operations, input_dim_o)).to(device)
@@ -75,7 +75,7 @@ class FlexibleJobShop:
         self.input_dim_o = 9
         self.input_dim_j = 4
         self.input_dim_m = 6
-        self.input_dim_pair = 2
+        self.input_dim_pair = 4
 
         if self.state_encoding == "DG":
             self.meta_data = (["machine", "operation"],
@@ -514,27 +514,27 @@ class FlexibleJobShop:
                     if idle:
                         proctime = current_operation.get_processing_time(machine.id)
                         if proctime != 0:
-                            # estimated_completion_time_min = self.sim_env.now
-                            # estimated_completion_time_max = self.sim_env.now
-                            # for k in range(job.step, len(job.operations)):
-                            #     if k == job.step:
-                            #         estimated_completion_time_min += proctime
-                            #         estimated_completion_time_max += proctime
-                            #     else:
-                            #         options = job.operations[k].options
-                            #         proctime_min = np.min(options[options.nonzero()])
-                            #         proctime_max = np.max(options[options.nonzero()])
-                            #         estimated_completion_time_min += proctime_min
-                            #         estimated_completion_time_max += proctime_max
+                            estimated_completion_time_min = self.sim_env.now
+                            estimated_completion_time_max = self.sim_env.now
+                            for k in range(job.step, len(job.operations)):
+                                if k == job.step:
+                                    estimated_completion_time_min += proctime
+                                    estimated_completion_time_max += proctime
+                                else:
+                                    options = job.operations[k].options
+                                    proctime_min = np.min(options[options.nonzero()])
+                                    proctime_max = np.max(options[options.nonzero()])
+                                    estimated_completion_time_min += proctime_min
+                                    estimated_completion_time_max += proctime_max
 
                             f1 = proctime / np.max(proctime_compatible)
                             f2 = proctime / np.max(proctime_compatible[:, machine.id])
-                            # f3 = estimated_completion_time_min / self.estimated_makespan
-                            # f4 = estimated_completion_time_max / self.estimated_makespan
+                            f3 = estimated_completion_time_min / self.estimated_makespan
+                            f4 = estimated_completion_time_max / self.estimated_makespan
                             # f3 = max(estimated_completion_time_min - job.due_date, 0)
                             # f4 = max(estimated_completion_time_max - job.due_date, 0)
 
-                            fea_pair[job.id, machine.id, :] = [f1, f2] #, f3, f4]
+                            fea_pair[job.id, machine.id, :] = [f1, f2, f3, f4]
 
         # fea_pair = (fea_pair - fea_pair.mean(axis=0, keepdims=True)) / (fea_pair.std(axis=0, keepdims=True) + 1e-8)
         # denominator = int(max(np.max(np.abs(fea_pair[:, 2])), np.max(np.abs(fea_pair[:, 3]))))
