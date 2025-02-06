@@ -22,16 +22,16 @@ def get_config():
     parser.add_argument("--load_model", type=int, default=0, help="whether to load the trained model (0: False, 1:True)")
     parser.add_argument("--model_path", type=str, default=None, help="model file path")
 
-    parser.add_argument("--n_jobs", type=int, default=10, help="number of jobs")
+    parser.add_argument("--n_jobs", type=int, default=30, help="number of jobs")
     parser.add_argument("--n_init_jobs", type=int, default=5, help="number of jobs")
-    parser.add_argument("--n_machines", type=int, default=5, help="number of machines")
+    parser.add_argument("--n_machines", type=int, default=12, help="number of machines")
     parser.add_argument("--n_operations_min", type=int, default=4, help="minimum number of operations per job")
     parser.add_argument("--n_operations_max", type=int, default=6, help="maximum number of operations per job")
-    parser.add_argument("--n_options_min", type=int, default=1, help="minimum number of available machines")
-    parser.add_argument("--n_options_max", type=int, default=5, help="maximum number of available machines")
-    parser.add_argument("--proctime_min", type=int, default=1, help="minimum processing time")
+    parser.add_argument("--n_options_min", type=int, default=6, help="minimum number of available machines")
+    parser.add_argument("--n_options_max", type=int, default=12, help="maximum number of available machines")
+    parser.add_argument("--proctime_min", type=int, default=10, help="minimum processing time")
     parser.add_argument("--proctime_max", type=int, default=20, help="maximum processing time")
-    parser.add_argument("--iat_avg", type=float, default=4, help="average inter-arrival time")
+    parser.add_argument("--iat_avg", type=float, default=8, help="average inter-arrival time")
     parser.add_argument("--ddt", type=float, default=1.2, help="due date tardiness")
 
     parser.add_argument("--state_encoding", type=str, default="DG", help="state encoding method")
@@ -54,7 +54,7 @@ def get_config():
     parser.add_argument("--lr_step", type=int, default=100, help="step size to reduce learning rate")
     parser.add_argument('--max_grad_norm', type=float, default=0.0,
                         help='Maximum L2 norm for gradient clipping, default 1.0 (0 to disable clipping)')
-    parser.add_argument("--gamma", type=float, default=0.98, help="discount ratio")
+    parser.add_argument("--gamma", type=float, default=1.0, help="discount ratio")
     parser.add_argument("--lmbda", type=float, default=0.95, help="GAE parameter")
     parser.add_argument("--eps_clip", type=float, default=0.2, help="clipping parameter")
     parser.add_argument("--K_epoch", type=int, default=3, help="optimization epoch")
@@ -163,12 +163,16 @@ if __name__ == "__main__":
 
         state_lst = [envs[i].reset() for i in range(n_envs)]
         reward_lst = [0.0 for i in range(n_envs)]
+        value_lst = [0.0 for i in range(n_envs)]
         done_lst = [False for i in range(n_envs)]
         action_flags = np.array([True for i in range(n_envs)])
+
+        total_step = 0
 
         while not all(done_lst):
             update_flags = [[] for _ in range(n_envs)]
             for t in range(config.T_horizon):
+                total_step += 1
                 action, log_prob, state_value = agent.get_action(state_lst, action_flags)
                 action_idx = 0
                 for i, env in enumerate(envs):
@@ -187,6 +191,8 @@ if __name__ == "__main__":
 
                     state_lst[i] = next_state
                     reward_lst[i] += reward
+                    if total_step == 1:
+                        value_lst[i] = state_value
                     done_lst[i] = done
 
                     if done:
@@ -215,31 +221,37 @@ if __name__ == "__main__":
 
         if use_vessl:
             vessl.log(payload={"Train/Reward": np.mean(reward_lst),
+                               "Train/StateValue": np.mean(value_lst),
                                "Loss/Loss": loss_episode / n_update,
                                "Loss/PolicyLoss": policy_loss_episode / n_update,
                                "Loss/ValueLoss": value_loss_episode / n_update,
                                "Loss/EntropyLoss": entropy_loss_episode / n_update,
-                               "Train/GradNorms": grad_norms_episode / n_update,
-                               "Train/GradNormsClipped": grad_norms_clipped_episode / n_update}, step=e)
+                               "Gradient/GradNorms": grad_norms_episode / n_update,
+                               "Gradient/GradNormsClipped": grad_norms_clipped_episode / n_update}, step=e)
         else:
             writer.add_scalar("Training/Reward", np.mean(reward_lst), e)
+            writer.add_scalar("Training/StateValue", np.mean(value_lst), e)
             writer.add_scalar("Loss/Loss", loss_episode / n_update, e)
             writer.add_scalar("Loss/PolicyLoss", policy_loss_episode / n_update, e)
             writer.add_scalar("Loss/ValueLoss", value_loss_episode / n_update, e)
             writer.add_scalar("Loss/EntropyLoss", entropy_loss_episode / n_update, e)
-            writer.add_scalar("Training/GradNorms", grad_norms_episode / n_update, e)
-            writer.add_scalar("Training/GradNormsClipped", grad_norms_clipped_episode / n_update, e)
+            writer.add_scalar("Gradient/GradNorms", grad_norms_episode / n_update, e)
+            writer.add_scalar("Gradient/GradNormsClipped", grad_norms_clipped_episode / n_update, e)
 
         if e == start_episode or e % eval_every == 0:
-            total_tardiness_avg = evaluate(agent, device, config)
+            makespan_avg = evaluate(agent, device, config)
+            # total_tardiness_avg = evaluate(agent, device, config)
 
             with open(log_dir + "validation_log.csv", 'a') as f:
-                f.write('%d, %1.4f\n' % (e, total_tardiness_avg))
+                f.write('%d, %1.4f\n' % (e, makespan_avg))
+                # f.write('%d, %1.4f\n' % (e, total_tardiness_avg))
 
             if use_vessl:
-                vessl.log(payload={"Perf/TotalTardiness": total_tardiness_avg}, step=e)
+                vessl.log(payload={"Perf/Makespan": makespan_avg}, step=e)
+                # vessl.log(payload={"Perf/TotalTardiness": total_tardiness_avg}, step=e)
             else:
-                writer.add_scalar("Validation/TotalTardiness", total_tardiness_avg, e)
+                writer.add_scalar("Validation/Makespan", makespan_avg, e)
+                # writer.add_scalar("Validation/TotalTardiness", total_tardiness_avg, e)
 
         if e % save_every == 0:
             agent.save(e, model_dir)

@@ -10,7 +10,8 @@ def evaluate(agent, device, config):
     val_paths = os.listdir(config.val_dir)
 
     with torch.no_grad():
-        total_tardiness_lst = []
+        makespan_lst = []
+        # total_tardiness_lst = []
         for path in val_paths:
             env = FlexibleJobShop(config.val_dir + path, config.look_ahead, device,
                                   state_encoding=config.state_encoding, record_events=config.record_events)
@@ -26,8 +27,11 @@ def evaluate(agent, device, config):
                 if done:
                     break
 
-            total_tardiness_lst.append(env.model['Sink'].total_tardiness)
+            makespan_lst.append(env.model['Sink'].completion_time)
+            # total_tardiness_lst.append(env.model['Sink'].total_tardiness)
 
-        total_tardiness_avg = sum(total_tardiness_lst) / len(total_tardiness_lst)
+        makespan_avg = sum(makespan_lst) / len(makespan_lst)
+        # total_tardiness_avg = sum(total_tardiness_lst) / len(total_tardiness_lst)
 
-        return total_tardiness_avg
+        return makespan_avg
+        # return total_tardiness_avg

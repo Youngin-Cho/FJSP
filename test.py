@@ -53,26 +53,25 @@ if __name__ == "__main__":
         if not os.path.exists(res_dir_temp):
             os.makedirs(res_dir_temp)
 
-    algorithm = ["SPT", "MDD", "ATC"] #, "COVERT"]
+    algorithm = ["SPT", "MWKR", "MOR"]
 
     for data_dir_temp, res_dir_temp in zip(data_dir, res_dir):
         test_paths = os.listdir(data_dir_temp)
         index = ["P%d" % i for i in range(1, len(test_paths) + 1)] + ["avg"]
         columns = algorithm
 
-        df_tardiness = pd.DataFrame(index=index, columns=columns)
+        df_makespan = pd.DataFrame(index=index, columns=columns)
+        # df_tardiness = pd.DataFrame(index=index, columns=columns)
         df_computing_time = pd.DataFrame(index=index, columns=columns)
 
         for name in columns:
             progress = 0
-            list_tardiness = []
+            list_makespan = []
+            # list_tardiness = []
             list_computing_time = []
 
             for prob, path in zip(index, test_paths):
                 random.seed(random_seed)
-
-                tardiness = 0.0
-                computing_time = 0.0
 
                 data_src = data_dir_temp + path
                 env = FlexibleJobShop(data_src, config.look_ahead, device,
@@ -123,21 +122,25 @@ if __name__ == "__main__":
 
                     if done:
                         finish = time.time()
-                        tardiness = env.model['Sink'].total_tardiness
+                        makespan = env.model['Sink'].completion_time
+                        # tardiness = env.model['Sink'].total_tardiness
                         computing_time = finish - start
                         break
 
-                list_tardiness.append(tardiness)
+                list_makespan.append(makespan)
+                # list_tardiness.append(tardiness)
                 list_computing_time.append(computing_time)
 
                 progress += 1
                 print("%d/%d test for %s done" % (progress, len(index) - 1, name))
 
-            df_tardiness[name] = list_tardiness + [sum(list_tardiness) / len(list_tardiness)]
+            df_makespan[name] = list_makespan + [sum(list_makespan) / len(list_makespan)]
+            # df_tardiness[name] = list_tardiness + [sum(list_tardiness) / len(list_tardiness)]
             df_computing_time[name] = list_computing_time + [sum(list_computing_time) / len(list_computing_time)]
             print("==========test for %s finished==========" % name)
 
         writer = pd.ExcelWriter(res_dir_temp + 'test_results.xlsx')
-        df_tardiness.to_excel(writer, sheet_name="tardiness")
+        df_makespan.to_excel(writer, sheet_name="makespan")
+        # df_tardiness.to_excel(writer, sheet_name="tardiness")
         df_computing_time.to_excel(writer, sheet_name="computing_time")
         writer.close()

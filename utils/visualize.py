@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 def WIP_graph(data, graph=False, filepath=None):
     start = data["Arrival_Date"].min()
-    finish = data["Due_Date"].max()
+    finish = int(data["Due_Date"].max() * 4.0)
     timeline = np.arange(start, finish + 1)
     wip = np.zeros(int(finish - start) + 1)
 
@@ -32,6 +32,6 @@ def WIP_graph(data, graph=False, filepath=None):
 
 if __name__ == "__main__":
     import pandas as pd
-    data_path = "../input/validation/15-5/instance-11.xlsx"
+    data_path = "../input/new_validation/30-12/instance-2.xlsx"
     data = pd.read_excel(data_path)
     wip = WIP_graph(data, graph=True)

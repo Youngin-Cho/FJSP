@@ -23,7 +23,7 @@ class StatePDR:
 
 class State:
     def __init__(self, num_jobs, num_operations, num_machines, look_ahead, device, state_encoding="DG",
-                 input_dim_o=4, input_dim_j=4, input_dim_m=3, input_dim_pair=3):
+                 input_dim_o=7, input_dim_j=4, input_dim_m=6, input_dim_pair=2):
 
         if state_encoding == "DG":
             fea_o = torch.zeros((num_operations, input_dim_o)).to(device)
@@ -70,12 +70,12 @@ class FlexibleJobShop:
         self.record_events = record_events
 
         self.df_scenario, self.df_initial, self.num_jobs, self.num_operations, self.num_machines, \
-            self.job_ids, self.machine_ids, self.due_dates = self._initialize()
+            self.job_ids, self.machine_ids, self.due_dates, self.estimated_makespan = self._initialize()
 
-        self.input_dim_o = 4
+        self.input_dim_o = 7
         self.input_dim_j = 4
-        self.input_dim_m = 3
-        self.input_dim_pair = 3
+        self.input_dim_m = 6
+        self.input_dim_pair = 2
 
         if self.state_encoding == "DG":
             self.meta_data = (["machine", "operation"],
@@ -97,8 +97,11 @@ class FlexibleJobShop:
         done = False
 
         job = self.monitor.remove_queue(job_id)
+        operation = job.get_current_operation()
         current_machine = job.current_machine
         next_machine = self.machine_ids[machine_id] if self.machine_ids.get(machine_id) is not None else "Buffer"
+
+        self.completion_time_updated[job.id] = self.sim_env.now + operation.get_processing_time(machine_id)
 
         if current_machine is None:
             self.model["Source"].calling_event[job.name].succeed(next_machine)
@@ -152,6 +155,7 @@ class FlexibleJobShop:
 
         reward = self._calculate_reward()
 
+        self.estimated_completion_time = copy.copy(self.estimated_completion_time_updated)
         self.completion_time = copy.copy(self.completion_time_updated)
         self.total_tardiness = self.model["Sink"].total_tardiness
         if self.decision_time != self.sim_env.now:
@@ -165,6 +169,8 @@ class FlexibleJobShop:
         self.actions_done = []
         self.completion_time = np.zeros(self.num_jobs)
         self.completion_time_updated = np.zeros(self.num_jobs)
+        self.estimated_completion_time = np.zeros(self.num_jobs)
+        self.estimated_completion_time_updated = np.zeros(self.num_jobs)
         self.total_tardiness = 0.0
         self.decision_time = 0.0
 
@@ -209,19 +215,19 @@ class FlexibleJobShop:
                 self.decision_time = self.sim_env.now
                 break
 
-        self.completion_time = copy.copy(self.completion_time_updated)
+        self.estimated_completion_time = copy.copy(self.estimated_completion_time_updated)
 
         return initial_state
 
     def _initialize(self):
         if type(self.data_src) is DataGenerator:
             df_scenario, df_initial = self.data_src.generate()
-            # flag = True
-            # while flag:
-            #     df_scenario, df_initial = self.data_src.generate()
-            #     max_wip = WIP_graph(df_scenario)
-            #     if len(df_scenario.columns[9:]) * 0.8 <= max_wip <= len(df_scenario.columns[9:]) * 1.2:
-            #         flag = False
+            flag = True
+            while flag:
+                df_scenario, df_initial = self.data_src.generate()
+                max_wip = WIP_graph(df_scenario)
+                if max_wip <= 20:
+                    flag = False
         else:
             df_scenario = pd.read_excel(self.data_src, sheet_name="scenario", engine='openpyxl')
             df_initial = pd.read_excel(self.data_src, sheet_name="initial", engine='openpyxl')
@@ -244,7 +250,22 @@ class FlexibleJobShop:
         for i, due_date in zip(df_scenario["Job_Index"].unique(), df_scenario["Due_Date"].unique()):
             due_dates[int(i)] = due_date
 
-        return df_scenario, df_initial, num_jobs, num_operations, num_machines, job_ids, machine_ids, due_dates
+        estimated_makespan = 0.0
+        df_scenario_group = df_scenario.groupby(by=["Job_Name", "Job_Index", "Arrival_Date", "Due_Date"])
+        for idx, group in df_scenario_group:
+            job_name, job_index, arrival_date, due_date = idx
+
+            temp = arrival_date
+            for i, row in group.iterrows():
+                proctime = row.iloc[9:].to_numpy()
+                proctime_mean = np.mean(proctime[proctime.nonzero()])
+                temp += proctime_mean
+
+            if temp > estimated_makespan:
+                estimated_makespan = temp
+
+        return (df_scenario, df_initial, num_jobs, num_operations, num_machines,
+                job_ids, machine_ids, due_dates, estimated_makespan)
 
     def _get_mask(self):
         mask_pairs = np.zeros((self.num_jobs,self.num_machines), dtype=bool)
@@ -287,7 +308,7 @@ class FlexibleJobShop:
             proctime_remaining_mask = np.zeros(self.num_operations, dtype=bool)
             proctime_current_mask = np.zeros(self.num_jobs, dtype=bool)
 
-            self.completion_time_updated = copy.copy(self.completion_time)
+            self.estimated_completion_time_updated = copy.copy(self.estimated_completion_time)
 
             # Operation/Job Feature
             for j, job_name in self.job_ids.items():
@@ -349,19 +370,6 @@ class FlexibleJobShop:
 
                     eligible_options = operation.options[operation.options.nonzero()]
 
-                    # Operation Feature
-                    f1 = np.min(eligible_options) # / np.max(self.df_scenario.iloc[:, 9:])
-                    f2 = np.max(eligible_options) # / np.max(self.df_scenario.iloc[:, 9:])
-                    f3 = np.mean(eligible_options) # / job_proctime_sum
-                    f4 = len(eligible_options) # / self.num_machines
-
-                    if self.state_encoding == "DG":
-                        fea_o[operation.id, :] = [f1, f2, f3, f4]
-                    elif self.state_encoding == "BG" and k < self.look_ahead:
-                        first_idx =  self.input_dim_j + k * self.input_dim_o
-                        last_idx = self.input_dim_j + (k + 1) * self.input_dim_o
-                        fea_j[job.id, first_idx:last_idx] = [f1, f2, f3, f4]
-
                     if flag:
                         earliest_finish_time = earliest_finish_time + proctime
                         latest_finish_time = latest_finish_time + proctime
@@ -370,6 +378,30 @@ class FlexibleJobShop:
                         earliest_finish_time = earliest_finish_time + np.min(eligible_options)
                         latest_finish_time = latest_finish_time + np.max(eligible_options)
                         mean_finish_time = mean_finish_time + np.mean(eligible_options)
+
+                    # Operation Feature
+                    if (operation.id in self.monitor.operations_in_machine.keys()
+                            or operation.id in self.monitor.operations_in_buffer.keys()):
+                        f0 = [0, 1, 0]
+                    elif operation.id in self.monitor.operations_done:
+                        f0 = [0, 0, 1]
+                    else:
+                        f0 = [1, 0, 0]
+
+                    f1 = np.min(eligible_options) / np.max(self.df_scenario.iloc[:, 9:])
+                    f2 = np.max(eligible_options) / np.max(self.df_scenario.iloc[:, 9:])
+                    f3 = np.mean(eligible_options) / job_proctime_sum
+                    f4 = len(eligible_options) / self.num_machines
+                    # f5 = earliest_finish_time / self.estimated_makespan
+                    # f6 = latest_finish_time / self.estimated_makespan
+
+                    if self.state_encoding == "DG":
+                        fea_o[operation.id, :3] = f0
+                        fea_o[operation.id, 3:] = [f1, f2, f3, f4] #, f5, f6]
+                    elif self.state_encoding == "BG" and k < self.look_ahead:
+                        first_idx =  self.input_dim_j + k * self.input_dim_o
+                        last_idx = self.input_dim_j + (k + 1) * self.input_dim_o
+                        fea_j[job.id, first_idx:last_idx] = [f1, f2, f3, f4] #, f5, f6]
 
                     if self.state_encoding == "DG":
                         if k >= job.step:
@@ -399,7 +431,7 @@ class FlexibleJobShop:
                                     edge_m_to_j[0].append(i)
                                     edge_m_to_j[1].append(job.id)
 
-                self.completion_time_updated[job.id] = latest_finish_time
+                self.estimated_completion_time_updated[job.id] = latest_finish_time
 
                 if self.state_encoding == "BG":
                     # Job feature
@@ -412,14 +444,14 @@ class FlexibleJobShop:
 
                     fea_j[job.id, 0:self.input_dim_j] = [f1, f2, f5, f6]
 
-            if self.state_encoding == "DG":
-                fea_o = (fea_o - fea_o.mean(axis=0, keepdims=True)) / (fea_o.std(axis=0, keepdims=True) + 1e-8)
-            elif self.state_encoding == "BG":
-                # Normalization
-                fea_j = (fea_j - fea_j.mean(axis=0, keepdims=True)) / (fea_j.std(axis=0, keepdims=True) + 1e-8)
-                # fea_j[:, 3] = fea_j[:, 3] / np.max(fea_j[:, 3]) if np.max(fea_j[:, 3]) > 0.0 else 0.0
-                # fea_j[:, 4] = fea_j[:, 4] / np.max(fea_j[:, 5]) if np.max(fea_j[:, 5]) > 0.0 else 0.0
-                # fea_j[:, 5] = fea_j[:, 5] / np.max(fea_j[:, 5]) if np.max(fea_j[:, 5]) > 0.0 else 0.0
+            # if self.state_encoding == "DG":
+            #     fea_o = (fea_o - fea_o.mean(axis=0, keepdims=True)) / (fea_o.std(axis=0, keepdims=True) + 1e-8)
+            # elif self.state_encoding == "BG":
+            #     # Normalization
+            #     fea_j = (fea_j - fea_j.mean(axis=0, keepdims=True)) / (fea_j.std(axis=0, keepdims=True) + 1e-8)
+            #     # fea_j[:, 3] = fea_j[:, 3] / np.max(fea_j[:, 3]) if np.max(fea_j[:, 3]) > 0.0 else 0.0
+            #     # fea_j[:, 4] = fea_j[:, 4] / np.max(fea_j[:, 5]) if np.max(fea_j[:, 5]) > 0.0 else 0.0
+            #     # fea_j[:, 5] = fea_j[:, 5] / np.max(fea_j[:, 5]) if np.max(fea_j[:, 5]) > 0.0 else 0.0
 
             # Machine Feature
             proctime_remaining = proctime_remaining[proctime_remaining_mask]
@@ -447,23 +479,29 @@ class FlexibleJobShop:
                 if not idle:
                     proctime_compatible[:, machine.id] = 0
 
+                if idle:
+                    f0 = [1, 0]
+                else:
+                    f0 = [0, 1]
+
                 # f1 = min(eligible_proctime_current, default=0.0)
                 # f2 = np.sum(eligible_proctime_remaining) / proctime_remaining_sum
-                f3 = np.sum(eligible_proctime_current) # / proctime_current_sum
+                f3 = np.sum(eligible_proctime_current) / proctime_current_sum
                 # f4 = len(eligible_proctime_remaining) / len(proctime_remaining)
-                f5 = len(eligible_proctime_current) # / len(proctime_current)
+                f5 = len(eligible_proctime_current) / len(proctime_current)
                 # f6 = 1 if idle else 0
                 f7 = available_time - self.sim_env.now
-                # f8 = (self.sim_env.now - machine.completion_time) if idle else 0
+                f8 = (self.sim_env.now - machine.completion_time) if idle else 0
 
-                fea_m[machine.id, :] = [f3, f5, f7]
+                fea_m[machine.id, :2] = f0
+                fea_m[machine.id, 2:] = [f3, f5, f7, f8]
 
             # Normalization
-            fea_m = (fea_m - fea_m.mean(axis=0, keepdims=True)) / (fea_m.std(axis=0, keepdims=True) + 1e-8)
+            # fea_m = (fea_m - fea_m.mean(axis=0, keepdims=True)) / (fea_m.std(axis=0, keepdims=True) + 1e-8)
             # fea_m[:, 0] = fea_m[:, 0] / np.max(fea_m[:, 0])
-            # if int(np.max(available_time_list) - self.sim_env.now) != 0:
-            #     fea_m[:, 6] = fea_m[:, 6] / (np.max(available_time_list) - self.sim_env.now)
-            # fea_m[:, 7] = fea_m[:, 7] / np.max(fea_m[:, 7]) if np.max(fea_m[:, 7]) > 0.0 else 0.0
+            if int(np.max(available_time_list) - self.sim_env.now) != 0:
+                fea_m[:, 4] = fea_m[:, 4] / (np.max(available_time_list) - self.sim_env.now)
+            fea_m[:, 5] = fea_m[:, 5] / np.max(fea_m[:, 5]) if np.max(fea_m[:, 5]) > 0.0 else 0.0
 
             # Pair Feature
             for j, job in enumerate(self.monitor.jobs_in_queue.values()):
@@ -476,27 +514,29 @@ class FlexibleJobShop:
                     if idle:
                         proctime = current_operation.get_processing_time(machine.id)
                         if proctime != 0:
-                            estimated_completion_time_min = self.sim_env.now
-                            estimated_completion_time_max = self.sim_env.now
-                            for k in range(job.step, len(job.operations)):
-                                if k == job.step:
-                                    estimated_completion_time_min += proctime
-                                    estimated_completion_time_max += proctime
-                                else:
-                                    options = job.operations[k].options
-                                    proctime_min = np.min(options[options.nonzero()])
-                                    proctime_max = np.max(options[options.nonzero()])
-                                    estimated_completion_time_min += proctime_min
-                                    estimated_completion_time_max += proctime_max
+                            # estimated_completion_time_min = self.sim_env.now
+                            # estimated_completion_time_max = self.sim_env.now
+                            # for k in range(job.step, len(job.operations)):
+                            #     if k == job.step:
+                            #         estimated_completion_time_min += proctime
+                            #         estimated_completion_time_max += proctime
+                            #     else:
+                            #         options = job.operations[k].options
+                            #         proctime_min = np.min(options[options.nonzero()])
+                            #         proctime_max = np.max(options[options.nonzero()])
+                            #         estimated_completion_time_min += proctime_min
+                            #         estimated_completion_time_max += proctime_max
 
-                            f1 = proctime # / np.max(proctime_compatible)
-                            # f2 = proctime / np.max(proctime_compatible[:, machine.id])
-                            f3 = max(estimated_completion_time_min - job.due_date, 0)
-                            f4 = max(estimated_completion_time_max - job.due_date, 0)
+                            f1 = proctime / np.max(proctime_compatible)
+                            f2 = proctime / np.max(proctime_compatible[:, machine.id])
+                            # f3 = estimated_completion_time_min / self.estimated_makespan
+                            # f4 = estimated_completion_time_max / self.estimated_makespan
+                            # f3 = max(estimated_completion_time_min - job.due_date, 0)
+                            # f4 = max(estimated_completion_time_max - job.due_date, 0)
 
-                            fea_pair[job.id, machine.id, :] = [f1, f3, f4]
+                            fea_pair[job.id, machine.id, :] = [f1, f2] #, f3, f4]
 
-        fea_pair = (fea_pair - fea_pair.mean(axis=0, keepdims=True)) / (fea_pair.std(axis=0, keepdims=True) + 1e-8)
+        # fea_pair = (fea_pair - fea_pair.mean(axis=0, keepdims=True)) / (fea_pair.std(axis=0, keepdims=True) + 1e-8)
         # denominator = int(max(np.max(np.abs(fea_pair[:, 2])), np.max(np.abs(fea_pair[:, 3]))))
         # if denominator != 0:
         #     fea_pair[:, 2] = fea_pair[:, 2] / denominator
@@ -545,12 +585,15 @@ class FlexibleJobShop:
             proctimes = operation.options
             if self.algorithm == "SPT":
                 priority_index[job.id, proctimes != 0] = 1 / proctimes[proctimes != 0]
+            elif self.algorithm == "MWKR":
+                remaining_proctime = np.sum([np.mean(temp.options[temp.options != 0]) for temp in job.operations[job.step:]])
+                priority_index[job.id, proctimes != 0] = remaining_proctime
+            elif self.algorithm == "MOR":
+                priority_index[job.id, proctimes != 0] = len(job.operations) - job.step
             elif self.algorithm == "MDD":
                 priority_index[job.id, proctimes != 0] = 1 / np.maximum(job.due_date, proctimes[proctimes != 0] + self.sim_env.now)
             elif self.algorithm == "ATC":
                 priority_index[job.id, proctimes != 0] = 1 / proctimes[proctimes != 0] * np.exp(- np.maximum(job.due_date - self.sim_env.now - proctimes[proctimes != 0], 0) / proctimes[proctimes != 0])
-            elif self.algorithm == "COVERT":
-                pass
             else:
                 print("invalid algorithm name")
 
@@ -562,16 +605,63 @@ class FlexibleJobShop:
         return state
 
     def _calculate_reward(self):
+        # df_log = self.monitor.get_logs()
+        # df_log = df_log[df_log["Time"] > self.decision_time]
+        #
+        # df_group = df_log.groupby("Location")
+        #
+        # working_time = 0.0
+        # for location_name, df_temp in df_group:
+        #     if location_name in ["Buffer", "Source", "Sink"]:
+        #         continue
+        #
+        #     df_start = df_temp[df_temp["Event"] == "Working Started"]
+        #     df_finish = df_temp[df_temp["Event"] == "Working Finished"]
+        #
+        #     if len(df_start) < len(df_finish):
+        #         start = np.concatenate([np.array([self.decision_time]), df_start["Time"].to_numpy()])
+        #         finish = df_finish["Time"].to_numpy()
+        #         working_time += np.sum(finish - start)
+        #     elif len(df_start) > len(df_finish):
+        #         start = df_start["Time"].to_numpy()
+        #         finish = np.concatenate([df_finish["Time"].to_numpy(), np.array([self.sim_env.now])])
+        #         working_time += np.sum(finish - start)
+        #     else:
+        #         if len(df_start) == 0:
+        #             if not self.model[location_name].check_status()[0]:
+        #                 working_time += (self.sim_env.now - self.decision_time)
+        #         else:
+        #             if df_start["Time"].iloc[0] < df_finish["Time"].iloc[0]:
+        #                 start = df_start["Time"].to_numpy()
+        #                 finish = df_finish["Time"].to_numpy()
+        #                 working_time += np.sum(finish - start)
+        #             else:
+        #                 start = np.concatenate([np.array([self.decision_time]), df_start["Time"].to_numpy()])
+        #                 finish = np.concatenate([df_finish["Time"].to_numpy(), np.array([self.sim_env.now])])
+        #                 working_time += np.sum(finish - start)
+        #
+        # total_time = self.num_machines * (self.sim_env.now - self.decision_time)
+        # idle_time = total_time - working_time
+        #
+        # if total_time != 0:
+        #     reward = - idle_time # / total_time
+        # else:
+        #     reward = 0.0
+
         # reward = 0.0
         # if self.sim_env.now - self.decision_time > 0:
         #     for job_id, waiting_start in self.monitor.delay.items():
         #         reward += - (self.sim_env.now - waiting_start)  # / (self.sim_env.now - self.decision_time)
         #         self.monitor.delay[job_id] = self.sim_env.now
 
-        tardiness = np.sum(np.maximum(self.completion_time - self.due_dates, 0))
-        tardiness_updated = np.sum(np.maximum(self.completion_time_updated - self.due_dates, 0))
-        reward = - (tardiness_updated - tardiness)
-        #
+        makespan = np.max(self.completion_time)
+        makespan_updated = np.max(self.completion_time_updated)
+        reward = - (makespan_updated - makespan) / self.estimated_makespan
+
+        # tardiness = np.sum(np.maximum(self.estimated_completion_time - self.due_dates, 0))
+        # tardiness_updated = np.sum(np.maximum(self.estimated_completion_time_updated - self.due_dates, 0))
+        # reward = - (tardiness_updated - tardiness)
+
         # reward = - np.tanh(tardiness_updated - tardiness)
 
         # reward = np.exp(- (self.model["Sink"].total_tardiness - self.total_tardiness)) - 1
