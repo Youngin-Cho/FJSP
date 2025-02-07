@@ -63,6 +63,13 @@ class SchedulingNetwork(nn.Module):
             else:
                 self.critic.append(nn.Linear(self.hidden_dim_critic, 1))
 
+        self.init_parameters()
+
+    def init_parameters(self):
+        for param in self.parameters():
+            stdv = 1. / math.sqrt(param.size(-1))
+            param.data.uniform_(-stdv, stdv)
+
     def forward(self, fea_graph, fea_pair, mask_pair, current_o):
         batch_size = fea_graph.num_graphs
         x_dict, edge_index_dict = fea_graph.x_dict, fea_graph.edge_index_dict

@@ -501,6 +501,11 @@ class FlexibleJobShop:
             # Normalization
             # fea_m = (fea_m - fea_m.mean(axis=0, keepdims=True)) / (fea_m.std(axis=0, keepdims=True) + 1e-8)
             # fea_m[:, 0] = fea_m[:, 0] / np.max(fea_m[:, 0])
+
+            # if int(np.max(available_time_list) - self.sim_env.now) != 0:
+            #     fea_m[:, 2] = fea_m[:, 2] / (np.max(available_time_list) - self.sim_env.now)
+            # fea_m[:, 3] = fea_m[:, 3] / np.max(fea_m[:, 3]) if np.max(fea_m[:, 3]) > 0.0 else 0.0
+
             if int(np.max(available_time_list) - self.sim_env.now) != 0:
                 fea_m[:, 4] = fea_m[:, 4] / (np.max(available_time_list) - self.sim_env.now)
             fea_m[:, 5] = fea_m[:, 5] / np.max(fea_m[:, 5]) if np.max(fea_m[:, 5]) > 0.0 else 0.0
