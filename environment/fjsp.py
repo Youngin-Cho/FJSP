@@ -23,7 +23,7 @@ class StatePDR:
 
 class State:
     def __init__(self, num_jobs, num_operations, num_machines, look_ahead, device, state_encoding="DG",
-                 input_dim_o=9, input_dim_j=4, input_dim_m=6, input_dim_pair=4):
+                 input_dim_o=6, input_dim_j=4, input_dim_m=4, input_dim_pair=4):
 
         if state_encoding == "DG":
             fea_o = torch.zeros((num_operations, input_dim_o)).to(device)
@@ -72,9 +72,9 @@ class FlexibleJobShop:
         self.df_scenario, self.df_initial, self.num_jobs, self.num_operations, self.num_machines, \
             self.job_ids, self.machine_ids, self.due_dates, self.estimated_makespan = self._initialize()
 
-        self.input_dim_o = 9
+        self.input_dim_o = 6
         self.input_dim_j = 4
-        self.input_dim_m = 6
+        self.input_dim_m = 4
         self.input_dim_pair = 4
 
         if self.state_encoding == "DG":
@@ -380,13 +380,13 @@ class FlexibleJobShop:
                         mean_finish_time = mean_finish_time + np.mean(eligible_options)
 
                     # Operation Feature
-                    if (operation.id in self.monitor.operations_in_machine.keys()
-                            or operation.id in self.monitor.operations_in_buffer.keys()):
-                        f0 = [0, 1, 0]
-                    elif operation.id in self.monitor.operations_done:
-                        f0 = [0, 0, 1]
-                    else:
-                        f0 = [1, 0, 0]
+                    # if (operation.id in self.monitor.operations_in_machine.keys()
+                    #         or operation.id in self.monitor.operations_in_buffer.keys()):
+                    #     f0 = [0, 1, 0]
+                    # elif operation.id in self.monitor.operations_done:
+                    #     f0 = [0, 0, 1]
+                    # else:
+                    #     f0 = [1, 0, 0]
 
                     f1 = np.min(eligible_options) / np.max(self.df_scenario.iloc[:, 9:])
                     f2 = np.max(eligible_options) / np.max(self.df_scenario.iloc[:, 9:])
@@ -396,9 +396,9 @@ class FlexibleJobShop:
                     f6 = latest_finish_time / self.estimated_makespan
 
                     if self.state_encoding == "DG":
-                        # fea_o[operation.id, :] = [f1, f2, f3, f4, f5, f6]
-                        fea_o[operation.id, :3] = f0
-                        fea_o[operation.id, 3:] = [f1, f2, f3, f4, f5, f6]
+                        fea_o[operation.id, :] = [f1, f2, f3, f4, f5, f6]
+                        # fea_o[operation.id, :3] = f0
+                        # fea_o[operation.id, 3:] = [f1, f2, f3, f4, f5, f6]
                     elif self.state_encoding == "BG" and k < self.look_ahead:
                         first_idx =  self.input_dim_j + k * self.input_dim_o
                         last_idx = self.input_dim_j + (k + 1) * self.input_dim_o
@@ -480,10 +480,10 @@ class FlexibleJobShop:
                 if not idle:
                     proctime_compatible[:, machine.id] = 0
 
-                if idle:
-                    f0 = [1, 0]
-                else:
-                    f0 = [0, 1]
+                # if idle:
+                #     f0 = [1, 0]
+                # else:
+                #     f0 = [0, 1]
 
                 # f1 = min(eligible_proctime_current, default=0.0)
                 # f2 = np.sum(eligible_proctime_remaining) / proctime_remaining_sum
@@ -494,21 +494,21 @@ class FlexibleJobShop:
                 f7 = available_time - self.sim_env.now
                 f8 = (self.sim_env.now - machine.completion_time) if idle else 0
 
-                # fea_m[machine.id, :] = [f3, f5, f7, f8]
-                fea_m[machine.id, :2] = f0
-                fea_m[machine.id, 2:] = [f3, f5, f7, f8]
+                fea_m[machine.id, :] = [f3, f5, f7, f8]
+                # fea_m[machine.id, :2] = f0
+                # fea_m[machine.id, 2:] = [f3, f5, f7, f8]
 
             # Normalization
             # fea_m = (fea_m - fea_m.mean(axis=0, keepdims=True)) / (fea_m.std(axis=0, keepdims=True) + 1e-8)
             # fea_m[:, 0] = fea_m[:, 0] / np.max(fea_m[:, 0])
 
-            # if int(np.max(available_time_list) - self.sim_env.now) != 0:
-            #     fea_m[:, 2] = fea_m[:, 2] / (np.max(available_time_list) - self.sim_env.now)
-            # fea_m[:, 3] = fea_m[:, 3] / np.max(fea_m[:, 3]) if np.max(fea_m[:, 3]) > 0.0 else 0.0
-
             if int(np.max(available_time_list) - self.sim_env.now) != 0:
-                fea_m[:, 4] = fea_m[:, 4] / (np.max(available_time_list) - self.sim_env.now)
-            fea_m[:, 5] = fea_m[:, 5] / np.max(fea_m[:, 5]) if np.max(fea_m[:, 5]) > 0.0 else 0.0
+                fea_m[:, 2] = fea_m[:, 2] / (np.max(available_time_list) - self.sim_env.now)
+            fea_m[:, 3] = fea_m[:, 3] / np.max(fea_m[:, 3]) if np.max(fea_m[:, 3]) > 0.0 else 0.0
+
+            # if int(np.max(available_time_list) - self.sim_env.now) != 0:
+            #     fea_m[:, 4] = fea_m[:, 4] / (np.max(available_time_list) - self.sim_env.now)
+            # fea_m[:, 5] = fea_m[:, 5] / np.max(fea_m[:, 5]) if np.max(fea_m[:, 5]) > 0.0 else 0.0
 
             # Pair Feature
             for j, job in enumerate(self.monitor.jobs_in_queue.values()):
