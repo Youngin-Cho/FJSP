@@ -658,7 +658,7 @@ class FlexibleJobShop:
 
         makespan = np.max(self.completion_time)
         makespan_updated = np.max(self.completion_time_updated)
-        reward = - (makespan_updated - makespan) / self.estimated_makespan
+        reward = - (makespan_updated - makespan) # / self.estimated_makespan
 
         # tardiness = np.sum(np.maximum(self.estimated_completion_time - self.due_dates, 0))
         # tardiness_updated = np.sum(np.maximum(self.estimated_completion_time_updated - self.due_dates, 0))

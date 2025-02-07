@@ -59,6 +59,7 @@ def get_config():
     parser.add_argument("--eps_clip", type=float, default=0.2, help="clipping parameter")
     parser.add_argument("--K_epoch", type=int, default=3, help="optimization epoch")
     parser.add_argument("--T_horizon", type=int, default=10, help="the number of steps to obtain samples")
+    parser.add_argument("--no_adv_norm", action='store_true', help="Disable Advantage Normalization")
     parser.add_argument("--P_coeff", type=float, default=1, help="coefficient for policy loss")
     parser.add_argument("--V_coeff", type=float, default=0.5, help="coefficient for value loss")
     parser.add_argument("--E_coeff", type=float, default=0.01, help="coefficient for entropy loss")

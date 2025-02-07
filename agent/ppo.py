@@ -113,6 +113,7 @@ class Agent:
         self.eps_clip = config.eps_clip
         self.K_epoch = config.K_epoch
         self.T_horizon = config.T_horizon
+        self.no_adv_norm = config.no_adv_norm
         self.P_coeff = config.P_coeff
         self.V_coeff = config.V_coeff
         self.E_coeff = config.E_coeff
@@ -164,7 +165,9 @@ class Agent:
             advantage = self.gamma * self.lmbda * advantage + delta[:, i]
             advantages[:, i] = advantage
 
-        # advantages = (advantages - advantages.mean(dim=1, keepdim=True)) / (advantages.std(dim=1, correction=0, keepdim=True) + 1e-8)
+        if not self.no_adv_norm:
+            advantages = ((advantages - advantages.mean(dim=1, keepdim=True))
+                          / (advantages.std(dim=1, correction=0, keepdim=True) + 1e-8))
 
         avg_loss = 0.0
         avg_policy_loss, avg_value_loss, avg_entropy_loss = 0.0, 0.0, 0.0
