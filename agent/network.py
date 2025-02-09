@@ -49,7 +49,7 @@ class SchedulingNetwork(nn.Module):
         self.actor = nn.ModuleList()
         for i in range(self.n_layers_actor):
             if i == 0:
-                self.actor.append(nn.Linear(self.embed_dim * 3, self.hidden_dim_actor))
+                self.actor.append(nn.Linear(self.embed_dim * 5, self.hidden_dim_actor))
             elif 0 < i < self.n_layers_actor - 1:
                 self.actor.append(nn.Linear(self.hidden_dim_actor, self.hidden_dim_actor))
             else:
@@ -106,11 +106,18 @@ class SchedulingNetwork(nn.Module):
             h_pairs = self.ffn[i](h_pairs)
             h_pairs = F.elu(h_pairs)
 
-        h_actions = torch.cat((h_machines_padding, h_jobs_padding, h_pairs), dim=-1)
+        h_machines_pooled_padding = h_machines_pooled[:, None, None, :].expand_as(h_machines_padding)
+
         if "operation" in self.meta_data[0]:
             h_pooled = torch.cat((h_machines_pooled, h_operations_pooled), dim=-1)
+            h_operations_pooled_padding = h_operations_pooled[:, None, None, :].expand_as(h_jobs_padding)
+            h_actions = torch.cat((h_machines_padding, h_jobs_padding, h_pairs,
+                                   h_machines_pooled_padding, h_operations_pooled_padding), dim=-1)
         elif "job" in self.meta_data[0]:
             h_pooled = torch.cat((h_machines_pooled, h_jobs_pooled), dim=-1)
+            h_jobs_pooled_padding = h_jobs_pooled[:, None, None, :].expand_as(h_jobs_padding)
+            h_actions = torch.cat((h_machines_padding, h_jobs_padding, h_pairs,
+                                   h_machines_pooled_padding, h_jobs_pooled_padding), dim=-1)
 
         for i in range(self.n_layers_actor):
             if i < len(self.actor) - 1:
