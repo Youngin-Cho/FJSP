@@ -612,48 +612,48 @@ class FlexibleJobShop:
         return state
 
     def _calculate_reward(self):
-        # df_log = self.monitor.get_logs()
-        # df_log = df_log[df_log["Time"] > self.decision_time]
-        #
-        # df_group = df_log.groupby("Location")
-        #
-        # working_time = 0.0
-        # for location_name, df_temp in df_group:
-        #     if location_name in ["Buffer", "Source", "Sink"]:
-        #         continue
-        #
-        #     df_start = df_temp[df_temp["Event"] == "Working Started"]
-        #     df_finish = df_temp[df_temp["Event"] == "Working Finished"]
-        #
-        #     if len(df_start) < len(df_finish):
-        #         start = np.concatenate([np.array([self.decision_time]), df_start["Time"].to_numpy()])
-        #         finish = df_finish["Time"].to_numpy()
-        #         working_time += np.sum(finish - start)
-        #     elif len(df_start) > len(df_finish):
-        #         start = df_start["Time"].to_numpy()
-        #         finish = np.concatenate([df_finish["Time"].to_numpy(), np.array([self.sim_env.now])])
-        #         working_time += np.sum(finish - start)
-        #     else:
-        #         if len(df_start) == 0:
-        #             if not self.model[location_name].check_status()[0]:
-        #                 working_time += (self.sim_env.now - self.decision_time)
-        #         else:
-        #             if df_start["Time"].iloc[0] < df_finish["Time"].iloc[0]:
-        #                 start = df_start["Time"].to_numpy()
-        #                 finish = df_finish["Time"].to_numpy()
-        #                 working_time += np.sum(finish - start)
-        #             else:
-        #                 start = np.concatenate([np.array([self.decision_time]), df_start["Time"].to_numpy()])
-        #                 finish = np.concatenate([df_finish["Time"].to_numpy(), np.array([self.sim_env.now])])
-        #                 working_time += np.sum(finish - start)
-        #
-        # total_time = self.num_machines * (self.sim_env.now - self.decision_time)
-        # idle_time = total_time - working_time
-        #
-        # if total_time != 0:
-        #     reward = - idle_time # / total_time
-        # else:
-        #     reward = 0.0
+        df_log = self.monitor.get_logs()
+        df_log = df_log[df_log["Time"] > self.decision_time]
+
+        df_group = df_log.groupby("Location")
+
+        working_time = 0.0
+        for location_name, df_temp in df_group:
+            if location_name in ["Buffer", "Source", "Sink"]:
+                continue
+
+            df_start = df_temp[df_temp["Event"] == "Working Started"]
+            df_finish = df_temp[df_temp["Event"] == "Working Finished"]
+
+            if len(df_start) < len(df_finish):
+                start = np.concatenate([np.array([self.decision_time]), df_start["Time"].to_numpy()])
+                finish = df_finish["Time"].to_numpy()
+                working_time += np.sum(finish - start)
+            elif len(df_start) > len(df_finish):
+                start = df_start["Time"].to_numpy()
+                finish = np.concatenate([df_finish["Time"].to_numpy(), np.array([self.sim_env.now])])
+                working_time += np.sum(finish - start)
+            else:
+                if len(df_start) == 0:
+                    if not self.model[location_name].check_status()[0]:
+                        working_time += (self.sim_env.now - self.decision_time)
+                else:
+                    if df_start["Time"].iloc[0] < df_finish["Time"].iloc[0]:
+                        start = df_start["Time"].to_numpy()
+                        finish = df_finish["Time"].to_numpy()
+                        working_time += np.sum(finish - start)
+                    else:
+                        start = np.concatenate([np.array([self.decision_time]), df_start["Time"].to_numpy()])
+                        finish = np.concatenate([df_finish["Time"].to_numpy(), np.array([self.sim_env.now])])
+                        working_time += np.sum(finish - start)
+
+        total_time = self.num_machines * (self.sim_env.now - self.decision_time)
+        idle_time = total_time - working_time
+
+        if total_time != 0:
+            reward = - idle_time / total_time
+        else:
+            reward = 0.0
 
         # reward = 0.0
         # if self.sim_env.now - self.decision_time > 0:
@@ -661,9 +661,10 @@ class FlexibleJobShop:
         #         reward += - (self.sim_env.now - waiting_start)  # / (self.sim_env.now - self.decision_time)
         #         self.monitor.delay[job_id] = self.sim_env.now
 
-        makespan = np.max(self.completion_time)
-        makespan_updated = np.max(self.completion_time_updated)
-        reward = - (makespan_updated - makespan) # / self.estimated_makespan
+        # makespan = np.max(self.completion_time)
+        # makespan_updated = np.max(self.completion_time_updated)
+        # # reward = - (makespan_updated - makespan) # / self.estimated_makespan
+        # reward = 1 / (makespan_updated - makespan) if makespan_updated - makespan > 0 else 1.0
 
         # tardiness = np.sum(np.maximum(self.estimated_completion_time - self.due_dates, 0))
         # tardiness_updated = np.sum(np.maximum(self.estimated_completion_time_updated - self.due_dates, 0))
