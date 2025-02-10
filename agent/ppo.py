@@ -130,6 +130,7 @@ class Agent:
     def get_action(self, state, action_flags=None):
         fea_g, fea_pair, mask_pair, current_o = convert_state(state, self.device, action_flags)
 
+        self.policy.eval()
         with torch.no_grad():
             probs, value = self.policy(fea_g, fea_pair, mask_pair, current_o)
 
@@ -147,7 +148,7 @@ class Agent:
 
         flags = torch.BoolTensor(flags).to(self.device)
 
-        with ((torch.no_grad())):
+        with torch.no_grad():
             fea_g, fea_pair, mask_pair, current_o \
                 = convert_state(last_state, self.device, flags=[True for _ in range(self.n_envs)])
             _, last_value = self.policy(fea_g, fea_pair, mask_pair, current_o)
@@ -172,6 +173,8 @@ class Agent:
         avg_loss = 0.0
         avg_policy_loss, avg_value_loss, avg_entropy_loss = 0.0, 0.0, 0.0
         avg_grad_norms, avg_grad_norms_clipped = 0.0, 0.0
+
+        self.policy.train()
         for _ in range(self.K_epoch):
             new_probs, new_values = self.policy(fea_graph=fea_gs,
                                                 fea_pair=fea_pairs.flatten(0, 1),

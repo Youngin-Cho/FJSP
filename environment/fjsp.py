@@ -23,17 +23,19 @@ class StatePDR:
 
 class State:
     def __init__(self, num_jobs, num_operations, num_machines, look_ahead, device, state_encoding="DG",
-                 input_dim_o=8, input_dim_j=4, input_dim_m=6, input_dim_pair=6):
+                 input_dim_o=9, input_dim_j=4, input_dim_m=6, input_dim_pair=6):
 
         if state_encoding == "DG":
             fea_o = torch.zeros((num_operations, input_dim_o)).to(device)
             fea_m = torch.zeros((num_machines, input_dim_m)).to(device)
+            edge_pre = torch.from_numpy(np.array([[], []])).type(torch.long).to(device)
             edge_o_to_m = torch.from_numpy(np.array([[], []])).type(torch.long).to(device)
             edge_m_to_o = torch.from_numpy(np.array([[], []])).type(torch.long).to(device)
 
             self.fea_g = HeteroData()
             self.fea_g["operation"].x = fea_o
             self.fea_g["machine"].x = fea_m
+            self.fea_g["operation", "predecessor", "operation"].edge_index = edge_pre
             self.fea_g["operation", "operation_to_machine", "machine"].edge_index = edge_o_to_m
             self.fea_g["machine", "machine_to_operation", "operation"].edge_index = edge_m_to_o
 
@@ -72,7 +74,7 @@ class FlexibleJobShop:
         self.df_scenario, self.df_initial, self.num_jobs, self.num_operations, self.num_machines, \
             self.job_ids, self.machine_ids, self.due_dates, self.estimated_makespan, self.proctime_upper, self.proctime_lower = self._initialize()
 
-        self.input_dim_o = 8
+        self.input_dim_o = 9
         self.input_dim_j = 4
         self.input_dim_m = 6
         self.input_dim_pair = 6
@@ -393,21 +395,21 @@ class FlexibleJobShop:
 
                     f1 = np.min(eligible_options) / self.proctime_upper
                     f2 = np.mean(eligible_options) / self.proctime_upper
-                    f2 = np.max(eligible_options) / self.proctime_upper
-                    f3 = np.sum(job_proctime[k:]) / ((len(job.operations) - k) * self.proctime_upper)
+                    f3 = np.max(eligible_options) / self.proctime_upper
+                    f4 = np.sum(job_proctime[k:]) / ((len(job.operations) - k) * self.proctime_upper)
                     # f3 = np.mean(eligible_options) / job_proctime_sum
-                    f4 = len(eligible_options) / self.num_machines
-                    f5 = earliest_finish_time / ((k + 1) * self.proctime_upper)
+                    f5 = len(eligible_options) / self.num_machines
+                    f6 = earliest_finish_time / ((k + 1) * self.proctime_upper)
                     # f6 = latest_finish_time / self.estimated_makespan
 
                     if self.state_encoding == "DG":
                         # fea_o[operation.id, :] = [f1, f2, f3, f4, f5, f6]
                         fea_o[operation.id, :3] = f0
-                        fea_o[operation.id, 3:] = [f1, f2, f3, f4, f5] #, f6]
+                        fea_o[operation.id, 3:] = [f1, f2, f3, f4, f5, f6] #, f6]
                     elif self.state_encoding == "BG" and k < self.look_ahead:
                         first_idx =  self.input_dim_j + k * self.input_dim_o
                         last_idx = self.input_dim_j + (k + 1) * self.input_dim_o
-                        fea_j[job.id, first_idx:last_idx] = [f1, f2, f3, f4, f5] #, f6]
+                        fea_j[job.id, first_idx:last_idx] = [f1, f2, f3, f4, f5, f6] #, f6]
 
                     if self.state_encoding == "DG":
                         if k >= job.step:
@@ -572,12 +574,14 @@ class FlexibleJobShop:
         if self.state_encoding == "DG":
             fea_o = torch.from_numpy(fea_o).type(torch.float32).to(self.device)
             fea_m = torch.from_numpy(fea_m).type(torch.float32).to(self.device)
+            edge_pre = torch.from_numpy(np.array(edge_pre)).type(torch.long).to(self.device)
             edge_o_to_m = torch.from_numpy(np.array(edge_o_to_m)).type(torch.long).to(self.device)
             edge_m_to_o = torch.from_numpy(np.array(edge_m_to_o)).type(torch.long).to(self.device)
 
             fea_g = HeteroData()
             fea_g["operation"].x = fea_o
             fea_g["machine"].x = fea_m
+            fea_g["operation", "predecessor", "operation"].edge_index = edge_pre
             fea_g["operation", "operation_to_machine", "machine"].edge_index = edge_o_to_m
             fea_g["machine", "machine_to_operation", "operation"].edge_index = edge_m_to_o
 
