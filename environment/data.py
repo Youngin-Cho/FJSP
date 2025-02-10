@@ -127,7 +127,7 @@ if __name__ == '__main__':
         os.makedirs(file_dir)
 
     data_generator = DataGenerator(config)
-    n_instance = 20
+    n_instance = 100
     for i in range(1, n_instance + 1):
         file_path = file_dir + "instance-{0}.xlsx".format(i)
         data_generator.generate(file_path=file_path)

@@ -64,8 +64,8 @@ def get_config():
     parser.add_argument("--V_coeff", type=float, default=0.5, help="coefficient for value loss")
     parser.add_argument("--E_coeff", type=float, default=0.01, help="coefficient for entropy loss")
 
-    parser.add_argument("--eval_every", type=int, default=50, help="Evaluate every x episodes")
-    parser.add_argument("--save_every", type=int, default=100, help="Save a model every x episodes")
+    parser.add_argument("--eval_every", type=int, default=100, help="Evaluate every x episodes")
+    parser.add_argument("--save_every", type=int, default=1000, help="Save a model every x episodes")
     parser.add_argument("--reset_every", type=int, default=1, help="Generate new instances every x episodes")
     parser.add_argument("--record_events", type=int, default=0, help="whether to record the events (0: False, 1:True)")
 

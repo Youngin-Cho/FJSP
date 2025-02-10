@@ -29,6 +29,7 @@ class State:
             fea_o = torch.zeros((num_operations, input_dim_o)).to(device)
             fea_m = torch.zeros((num_machines, input_dim_m)).to(device)
             edge_pre = torch.from_numpy(np.array([[], []])).type(torch.long).to(device)
+            edge_suc = torch.from_numpy(np.array([[], []])).type(torch.long).to(device)
             edge_o_to_m = torch.from_numpy(np.array([[], []])).type(torch.long).to(device)
             edge_m_to_o = torch.from_numpy(np.array([[], []])).type(torch.long).to(device)
 
@@ -36,6 +37,7 @@ class State:
             self.fea_g["operation"].x = fea_o
             self.fea_g["machine"].x = fea_m
             self.fea_g["operation", "predecessor", "operation"].edge_index = edge_pre
+            self.fea_g["operation", "successor", "operation"].edge_index = edge_suc
             self.fea_g["operation", "operation_to_machine", "machine"].edge_index = edge_o_to_m
             self.fea_g["machine", "machine_to_operation", "operation"].edge_index = edge_m_to_o
 
@@ -82,6 +84,7 @@ class FlexibleJobShop:
         if self.state_encoding == "DG":
             self.meta_data = (["machine", "operation"],
                               [("operation", "predecessor", "operation"),
+                               ("operation", "successor", "operation"),
                                ("machine", "machine_to_operation", "operation"),
                                ("operation", "operation_to_machine", "machine")])
             self.input_dim_g = {"machine": self.input_dim_m, "operation": self.input_dim_o}
@@ -301,7 +304,7 @@ class FlexibleJobShop:
         current_o = np.zeros(self.num_jobs)
 
         if self.state_encoding == "DG":
-            edge_pre = [[], []]
+            edge_pre, edge_suc = [[], []], [[], []]
             edge_m_to_o, edge_o_to_m = [[], []], [[], []]
         elif self.state_encoding == "BG":
             edge_m_to_j, edge_j_to_m = [[], []], [[], []]
@@ -429,6 +432,8 @@ class FlexibleJobShop:
                         if k > 0:
                             edge_pre[0].append(operation.id - 1)
                             edge_pre[1].append(operation.id)
+                            edge_suc[0].append(operation.id)
+                            edge_suc[1].append(operation.id - 1)
 
                     elif self.state_encoding == "BG":
                         if k == job.step:
@@ -575,12 +580,14 @@ class FlexibleJobShop:
             fea_o = torch.from_numpy(fea_o).type(torch.float32).to(self.device)
             fea_m = torch.from_numpy(fea_m).type(torch.float32).to(self.device)
             edge_pre = torch.from_numpy(np.array(edge_pre)).type(torch.long).to(self.device)
+            edge_suc = torch.from_numpy(np.array(edge_suc)).type(torch.long).to(self.device)
             edge_o_to_m = torch.from_numpy(np.array(edge_o_to_m)).type(torch.long).to(self.device)
             edge_m_to_o = torch.from_numpy(np.array(edge_m_to_o)).type(torch.long).to(self.device)
 
             fea_g = HeteroData()
             fea_g["operation"].x = fea_o
             fea_g["machine"].x = fea_m
+            fea_g["operation", "successor", "operation"].edge_index = edge_suc
             fea_g["operation", "predecessor", "operation"].edge_index = edge_pre
             fea_g["operation", "operation_to_machine", "machine"].edge_index = edge_o_to_m
             fea_g["machine", "machine_to_operation", "operation"].edge_index = edge_m_to_o
